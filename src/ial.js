@@ -660,20 +660,11 @@
         //].join(' ');
     }
 
-    ial.generateAttributeWeightVector = function (points,simOrDiff) {
-        simOrDiff = typeof simOrDiff !== 'undefined' ? simOrDiff : 's';
-        if(simOrDiff=='s'){
-            ial.generateAttributeWeightVectorUsingSimilarityBetweenPoints(points);
-        }else if(simOrDiff=='d'){
-            ial.generateAttributeWeightVectorUsingDifferenceBetweenPoints(points);
-        }
-    };
-
 
     /*
     * Returns an attribute weight vector generated based on similarity between given points
     * */
-    ial.generateAttributeWeightVectorUsingSimilarityBetweenPoints = function (points) {
+    ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
 
         // returns 1-result since goal is to find similarity
         var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
@@ -691,7 +682,7 @@
         var attributeValueListMap = {};
 
 
-        // creating a map with all values as lists against attributes (frist step)
+        // creating a map with all values as lists against attributes (first step)
         for(var i in points){
             var d = points[i];
             for(var attribute in this.attributeWeightVector){
@@ -707,7 +698,7 @@
         console.log(attributeValueListMap)
 
         // setting weights as variances (intermediate step)
-        var minVariance = 9999.0,maxVariance = -9999.0;
+        var minVariance = Number.MAX_VALUE,maxVariance = Number.MIN_VALUE;
         for(var attribute in this.attributeWeightVector){
             //console.log("==================")
             if(this.attributeValueMap[attribute]['dataType']!='categorical') {
@@ -781,94 +772,207 @@
     /*
      * Returns an attribute weight vector generated based on difference between given points
      * */
-    ial.generateAttributeWeightVectorUsingDifferenceBetweenPoints = function (points) {
+    ial.generateAttributeWeightVectorUsingDifferences = function (points1, points2) {
+        if (typeof points2 !== 'undefined') { 
+            var points1Avg = {}, points2Avg = {}; 
+            var points1Len = points1.length, points2Len = points2.length;
+            var points1CatMap = {}, points2CatMap = {}; 
 
-        // returns result directly since goal is to find similarity
-        var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
-            var a = 0.0, b = 1.0;
-            var min = minVariance;
-            var max = maxVariance;
+            // sum all the attribute values in points1
+            for(var i in points1){
+                var d = points1[i];
+                for(var attribute in this.attributeWeightVector){
+                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        if(points1Avg.hasOwnProperty(attribute)) {
+                            points1Avg[attribute] += val; 
+                        } else{
+                            points1Avg[attribute] = val;
+                        }
+                    } else{
+                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        if(points1CatMap.hasOwnProperty(attribute)){
+                            if(points1CatMap[attribute].hasOwnProperty(val)){
+                                points1CatMap[attribute][val]++;
+                            } else{
+                                points1CatMap[attribute][val] = 1; 
+                            }
+                        } else{
+                            points1CatMap[attribute] = {}; 
+                            points1CatMap[attribute][val] = 1;
+                            points1Avg[attribute] = val;
+                        }
+                    }
+                }
+            }
 
-            var normalizedValue = (((b - a) * (variance - min) / (max - min)) + a);
+            // compute the average for each attribute in points1
+            for(var attribute in points1Avg){
+                if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                    points1Avg[attribute] = points1Avg[attribute] / points1Len; 
+                } else{
+                    var catMax = Math.MIN_VALUE;
+                    var catMaxVal = points1Avg[attribute];
+                    for(var attributeVal in points1CatMap[attribute]){
+                        if(points1CatMap[attribute][attributeVal] > catMax){
+                            catMax = points1CatMap[attribute][attributeVal];
+                            catMaxVal = attributeVal;
+                        }
+                    }
+                    points1Avg[attribute] = catMaxVal;
+                }
+            }
 
-            return normalizedValue;
-        };
+            // sum all the attribute values in points2
+            for(var i in points2){
+                var d = points2[i];
+                for(var attribute in this.attributeWeightVector){
+                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        if(points2Avg.hasOwnProperty(attribute)) {
+                            points2Avg[attribute] += val; 
+                        } else{
+                            points2Avg[attribute] = val;
+                        }
+                    } else{
+                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        if(points2CatMap.hasOwnProperty(attribute)){
+                            if(points2CatMap[attribute].hasOwnProperty(val)){
+                                points2CatMap[attribute][val]++;
+                            } else{
+                                points2CatMap[attribute][val] = 1; 
+                            }
+                        } else{
+                            points2CatMap[attribute] = {}; 
+                            points2CatMap[attribute][val] = 1;
+                            points2Avg[attribute] = val;
+                        }
+                    }
+                }
+            }
+
+            // compute the average for each attribute in points2
+            for(var attribute in points2Avg){
+                if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                    points2Avg[attribute] = points2Avg[attribute] / points2Len; 
+                } else{
+                    var catMax = Math.MIN_VALUE;
+                    var catMaxVal = points2Avg[attribute];
+                    for(var attributeVal in points2CatMap[attribute]){
+                        if(points2CatMap[attribute][attributeVal] > catMax){
+                            catMax = points2CatMap[attribute][attributeVal];
+                            catMaxVal = attributeVal;
+                        }
+                    }
+                    points2Avg[attribute] = catMaxVal;
+                }
+            }
+
+            var difference = {}; 
+            for(var attribute in points1Avg){
+                if(points2Avg.hasOwnProperty(attribute)){
+                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                        difference[attribute] = points1Avg[attribute] - points2Avg[attribute];
+                    }else {
+                        if(points1Avg[attribute] == points2Avg[attribute]){
+                            difference[attribute] = 0;
+                        }else{
+                            difference[attribute] = 1;
+                        }
+                    }
+                }
+            }
+            
+            tempAttributeWeightVector = difference;
+
+        } else {
+            // returns result directly since goal is to find similarity
+            var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
+                var a = 0.0, b = 1.0;
+                var min = minVariance;
+                var max = maxVariance;
+
+                var normalizedValue = (((b - a) * (variance - min) / (max - min)) + a);
+
+                return normalizedValue;
+            };
 
 
-        var tempAttributeWeightVector = {};
-        var attributeValueListMap = {};
+            var tempAttributeWeightVector = {};
+            var attributeValueListMap = {};
 
 
-        // creating a map with all values as lists against attributes (frist step)
-        for(var i in points){
-            var d = points[i];
+            // creating a map with all values as lists against attributes (first step)
+            for(var i in points1){
+                var d = points1[i];
+                for(var attribute in this.attributeWeightVector){
+                    var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                    if( attribute in attributeValueListMap){
+                        attributeValueListMap[attribute].push(val);
+                    }else{
+                        attributeValueListMap[attribute] = [];
+                        attributeValueListMap[attribute].push(val);
+                    }
+                }
+            }
+
+            // setting weights as variances (intermediate step)
+            var minVariance = Number.MAX_VALUE,maxVariance = Number.MIN_VALUE;
             for(var attribute in this.attributeWeightVector){
-                var val = this.getNormalizedAttributeValue(d[attribute],attribute);
-                if( attribute in attributeValueListMap){
-                    attributeValueListMap[attribute].push(val);
+                //console.log("==================")
+                if(this.attributeValueMap[attribute]['dataType']!='categorical') {
+                    tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
+                    if(tempAttributeWeightVector[attribute]<minVariance){
+                        minVariance = tempAttributeWeightVector[attribute];
+                    }
+                    if(tempAttributeWeightVector[attribute]>maxVariance){
+                        maxVariance = tempAttributeWeightVector[attribute];
+                    }
                 }else{
-                    attributeValueListMap[attribute] = [];
-                    attributeValueListMap[attribute].push(val);
+                    var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
+                    if(uniqueVals.length>1){
+                        tempAttributeWeightVector[attribute] = 1;
+                    }else{
+                        tempAttributeWeightVector[attribute] = 0;
+                    }
                 }
             }
-        }
+            //console.log(clone(tempAttributeWeightVector));
+            //console.log(minVariance,maxVariance);
 
-        // setting weights as variances (intermediate step)
-        var minVariance = 9999.0,maxVariance = -9999.0;
-        for(var attribute in this.attributeWeightVector){
-            //console.log("==================")
-            if(this.attributeValueMap[attribute]['dataType']!='categorical') {
-                tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
-                if(tempAttributeWeightVector[attribute]<minVariance){
-                    minVariance = tempAttributeWeightVector[attribute];
+            // setting weights as normalized values between 0 -1 based on variances (final step)
+            for(var attribute in this.attributeWeightVector) {
+                if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
+                    var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute],minVariance,maxVariance);
+
+                    tempAttributeWeightVector[attribute] = normalizedAttributeWeight;
                 }
-                if(tempAttributeWeightVector[attribute]>maxVariance){
-                    maxVariance = tempAttributeWeightVector[attribute];
-                }
-            }else{
-                var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
-                if(uniqueVals.length>1){
-                    tempAttributeWeightVector[attribute] = 1;
+            }
+
+            if(this.useNormalizedAttributeWeights==1){
+                tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
+            }
+
+            //---------------------------
+            // old difference based logic
+            //---------------------------
+            /*
+            for(var attribute in this.attributeWeightVector){
+                var val1 = this.getNormalizedAttributeValue(points[0][attribute],attribute);
+                var val2 = this.getNormalizedAttributeValue(points[1][attribute],attribute);
+                if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                    var diff = Math.abs(val1-val2);
+                    tempAttributeWeightVector[attribute] = diff;
                 }else{
-                    tempAttributeWeightVector[attribute] = 0;
+                    if(val1 == val2){
+                        tempAttributeWeightVector[attribute] = 0.0;
+                    }else{
+                        tempAttributeWeightVector[attribute] = 1.0;
+                    }
                 }
             }
+            */
         }
-        //console.log(clone(tempAttributeWeightVector));
-        //console.log(minVariance,maxVariance);
-
-        // setting weights as normalized values between 0 -1 based on variances (final step)
-        for(var attribute in this.attributeWeightVector) {
-            if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
-                var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute],minVariance,maxVariance);
-
-                tempAttributeWeightVector[attribute] = normalizedAttributeWeight;
-            }
-        }
-
-        if(this.useNormalizedAttributeWeights==1){
-            tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
-        }
-
-        //---------------------------
-        // old difference based logic
-        //---------------------------
-        /*
-        for(var attribute in this.attributeWeightVector){
-            var val1 = this.getNormalizedAttributeValue(points[0][attribute],attribute);
-            var val2 = this.getNormalizedAttributeValue(points[1][attribute],attribute);
-            if(this.attributeValueMap[attribute]['dataType']!='categorical'){
-                var diff = Math.abs(val1-val2);
-                tempAttributeWeightVector[attribute] = diff;
-            }else{
-                if(val1 == val2){
-                    tempAttributeWeightVector[attribute] = 0.0;
-                }else{
-                    tempAttributeWeightVector[attribute] = 1.0;
-                }
-            }
-        }
-        */
 
         return tempAttributeWeightVector;
     };
@@ -879,15 +983,15 @@
     * --------------------
     * */
 
-    ial.createClusters = function(dataItems) {
+    ial.createClusters = function(dataItems, knnDistance) {
         dataItems = typeof dataItems !== 'undefined' ? dataItems : this.dataSet;
-        this.clusters = this.classify(dataItems);
+        knnDistance = typeof knnDistance !== 'undefined' ? knnDistance : 0.05;
+        this.clusters = this.classify(dataItems, knnDistance);
         return this.clusters;
     };
 
-    ial.classify = function(dataPoints) {
+    ial.classify = function(dataPoints, knnDistance) {
         var aggregateScores = [];
-        var knnDistance = 0.05;
 
         var tempStringId = 10,
             tempStringValMap = {};
