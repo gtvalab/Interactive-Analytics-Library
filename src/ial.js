@@ -58,16 +58,21 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
                 this.activeAttributeCount += 1;
                 this.attributeWeightVector[attribute] = 1.0;
 
+                // note: mean and variance are based on NORMALIZED attribute values
                 if (!isNaN(passedData[0][attribute])){
                     this.attributeValueMap[attribute] = {
                         'min': parseFloat(passedData[0][attribute]),
                         'max': parseFloat(passedData[0][attribute]),
+                        'mean': parseFloat(passedData[0][attribute]),
+                        'variance': parseFloat(passedData[0][attribute]),
                         'dataType': 'numeric'
                     };
                 }else{ // need to change this part to handle categorical values
                     this.attributeValueMap[attribute] = {
                         'min': passedData[0][attribute],
                         'max': passedData[0][attribute],
+                        'mean': passedData[0][attribute],
+                        'variance': passedData[0][attribute],
                         'dataType': 'categorical'
                     };
                 }
@@ -100,7 +105,7 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
                 if(curValue>this.attributeValueMap[attribute]['max']){
                     this.attributeValueMap[attribute]['max'] = curValue;
                 }
-            }else{ // need to change this part to handle categorical values
+            }else{ // TODO: need to change this part to handle categorical values
                 if(dataItem[attribute]<this.attributeValueMap[attribute]['min']){
                     this.attributeValueMap[attribute]['min'] = dataItem[attribute];
                 }
@@ -110,6 +115,53 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
             }
         }
     }
+
+    /*
+    * find normalized values and mean
+    * */
+    for (var attribute in this.attributeValueMap) {
+        var attrMean = 0; 
+        for(var index in passedData){
+            var dataItem = passedData[index];
+            if(!isNaN(dataItem[attribute])){
+                var curValue = parseFloat(dataItem[attribute]);
+                var curNormValue = curValue - Number(this.attributeValueMap[attribute]['min']); 
+                curNormValue /= Number(this.attributeValueMap[attribute]['max']) - Number(this.attributeValueMap[attribute]['min']);
+                attrMean += curNormValue; 
+            }else{ // TODO: need to change this part to handle categorical values
+                attrMean = dataItem[attribute];
+                break;
+            }
+        }
+        if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+            this.attributeValueMap[attribute]['mean'] = attrMean / passedData.length;
+        } else this.attributeValueMap[attribute]['mean'] = attrMean; 
+    }
+
+    /* 
+    * find normalized variance
+    * */
+    for (var attribute in this.attributeValueMap) {
+        var attrMean = this.attributeValueMap[attribute]['mean']; 
+        var attrVariance = 0;
+        for(var index in passedData){
+            var dataItem = passedData[index];
+            if(!isNaN(dataItem[attribute])){
+                var curValue = parseFloat(dataItem[attribute]);
+                var curNormValue = curValue - Number(this.attributeValueMap[attribute]['min']); 
+                curNormValue /= Number(this.attributeValueMap[attribute]['max']) - Number(this.attributeValueMap[attribute]['min']);
+                var curSqDiff = (curNormValue - attrMean) * (curNormValue - attrMean);
+                attrVariance += curSqDiff;
+            }else{ // TODO: need to change this part to handle categorical values
+                attrVariance = dataItem[attribute];
+                break;
+            }
+        }
+        if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+            this.attributeValueMap[attribute]['variance'] = attrVariance / passedData.length;
+        } else this.attributeValueMap[attribute]['variance'] = attrVariance; 
+    }
+
     for(var index in passedData){
         this.dataSet[index]["ial"]["itemScore"] = parseFloat(getItemScore(this.ialIdToDataMap[index],this.attributeWeightVector));
     }
@@ -1220,7 +1272,66 @@ function getInteractionStackSubset(time) {
 
 // private
 function computeAverageDataItem(data) {
-    // TODO: account for categorical attributes
+    // TODO: account for categorical attributes; currently just taking 1st value
+    var avgData = {}; 
+    var attributeValueMap = ial.getAttributeValueMap(); 
+    var numericAttributeCounter = {}; 
+
+    // sum up all of the numerical attributes
+    for (var dataItem of data) {
+        for (var attr in attributeValueMap) {
+            if (avgData.hasOwnProperty(attr)) {
+                if (attributeValueMap[attr].dataType == 'numeric') {
+                    avgData[attr] = Number(avgData[attr]) + Number(dataItem[attr]);
+                    numericAttributeCounter[attr]++;
+                }
+            } else {
+                if (attributeValueMap[attr].dataType == 'numeric') numericAttributeCounter[attr] = 1;
+                avgData[attr] = dataItem[attr];
+            }
+        }
+    }
+
+    // average all of the numerical attributes
+    for (var attr in numericAttributeCounter) avgData[attr] /= Number(numericAttributeCounter[attr]);
+    return avgData;
+}
+
+// private
+// uses normalized attribute values
+function computeAttributeVariance(data, attr) {
+    // TODO: account for categorical variables
+    data = ial.getArray(data);
+    var mean = 0; 
+    var attributeValueMap = ial.getAttributeValueMap();
+    if (attributeValueMap[attr].dataType != 'numeric') return 0; 
+
+    for (var curDataItem of data) {
+        var curValue = parseFloat(curDataItem[attr]);
+        var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
+        curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+        mean += curNormValue;
+    }
+    mean /= data.length;
+
+    var variance = 0; 
+    for (var curDataItem of data) {
+        var curValue = parseFloat(curDataItem[attr]);
+        var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
+        curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+        var curSqDiff = (curNormValue - mean) * (curNormValue - mean); 
+        variance += curSqDiff;
+    }
+    variance /= data.length;
+
+    return variance; 
+}
+
+// private 
+// make sure you're dealing with an array
+ial.getArray = function(arrayLike) {
+    let arr = Array.from(arrayLike);
+    return arr;
 }
 
 
@@ -1233,12 +1344,12 @@ function computeAverageDataItem(data) {
 // threshold (optional) - default varies according to which metric is used
 // time (optional) can be given as a Date object or a number representing the number of previous interactions to consider
 // returns true if bias is detected, false otherwise
-ial.computeBias = function(metric, threshold, time) {
+ial.computeBias = function(metric, threshold1, time, threshold2) {
     if (typeof metric === 'undefined') metric = this.BIAS_VARIANCE;
 
-    if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold, time); 
-    else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold, time); 
-    else return ial.computeVarianceBias(threshold, time); 
+    if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, time); 
+    else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
+    else return ial.computeVarianceBias(threshold1, threshold2, time); 
 }
 
 // bias is defined as repeating the same interaction on the same data
@@ -1284,14 +1395,32 @@ ial.computeSubsetBias = function(threshold, time) {
 }
 
 // bias is defined as the variance between the data that has been examined
-ial.computeVarianceBias = function(threshold, time) {
+// indThreshold (optional) indicates how much of a decrease in variance is tolerated (defaults to -0.75)
+// percAttrThreshold (optional) indicates what percentage of attributes can be below indThreshold (defaults to 0.5)
+ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
     // TODO: how to handle categorical attributes
-    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.5;
+    if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = -0.75;
+    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
     interactionSubset = getInteractionStackSubset(time); 
+    attributeValueMap = ial.getAttributeValueMap(); 
 
-    // TODO: calculate mean data item (ignoring categorical attributes for now)
-    // TODO: calculate variance of each attribute - 
+    var dataSubset = new Set();
+    for (var i = 0; i < interactionSubset.length; i++) dataSubset.add(interactionSubset[i].dataItem);
     
+    // var avgDataItem = computeAverageDataItem(dataSubset);
+    var numNumericalAttributes = 0;
+    var numViolations = 0; 
+    for (var attr in attributeValueMap) {
+        if (attributeValueMap[attr].dataType == 'numeric') {
+            numNumericalAttributes++; 
+            var curVariance = Number(computeAttributeVariance(dataSubset, attr));
+            var curChange = (curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance']); 
+            if (curChange < indThreshold) numViolations++;
+        }
+    }
+
+    if ((numViolations / numNumericalAttributes) > percAttrThreshold) return true;
+    else return false; 
 }
 
 
