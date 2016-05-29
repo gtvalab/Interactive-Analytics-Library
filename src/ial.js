@@ -1262,12 +1262,58 @@ function getInteractionStackSubset(time) {
         } else if (!isNaN(parseInt(time))) {
             interactionSubset = [];
             if (time > this.interactionStack.length) time = this.interactionStack.length;
-            for (var i = 0; i < time; i++)
+            for (var i = 0; i < time; i++) 
                 interactionSubset.push(this.interactionStack[i]);
         }
     }
+
+    for (var i = 0; i < interactionSubset.length; i++) {
+        console.log("Log: " + JSON.stringify(interactionSubset[i])); // emily
+    }
     
     return interactionSubset;
+}
+
+// private
+// 'time' can be a Date object; returns all interactions that occurred since 'time'
+// 'time' can be an integer; returns the last 'time' interactions
+function getInteractionStackSubsetByEventType(time) {
+    this.interactionStack = ial.getInteractionStack();
+    interactionSubsetStacks = ial.getInteractionStack();
+
+    if (typeof time === 'undefined') time = this.interactionStack.length; 
+
+    if (time instanceof Date) {
+        interactionSubsetStacks = {}; 
+        for (var i = 0; i < this.interactionStack.length; i++) {
+            var curLog = this.interactionStack[i];
+            var curTime = curLog.eventTimeStamp;
+            if (curTime.getTime() >= time.getTime()) {
+                var curEventType = curLog.customLogInfo.eventType;
+                if (curEventType === 'undefined') curEventType = 'uncategorized';
+                var curStack = []; 
+                if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType]; 
+
+                curStack.push(curLog);
+                interactionSubsetStacks[curEventType] = curStack;
+            }
+        }
+    } else if (!isNaN(parseInt(time))) {
+        interactionSubsetStacks = {};
+        if (time > this.interactionStack.length) time = this.interactionStack.length;
+        for (var i = 0; i < time; i++) {
+            var curLog = this.interactionStack[i];
+            var curEventType = curLog.customLogInfo.eventType;
+            if (curEventType === 'undefined') curEventType = 'uncategorized';
+            var curStack = []; 
+            if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType]; 
+
+            curStack.push(curLog);
+            interactionSubsetStacks[curEventType] = curStack;
+        }
+    }
+    
+    return interactionSubsetStacks;
 }
 
 // private
@@ -1361,15 +1407,21 @@ ial.computeRepetitionBias = function(threshold, time) {
     // consider sensitivity to time frame of repetitions (i.e. there were only 4 but they all happened within a span of 6 interactions)
     // or there were 10 but they happened over the span of 1000 interactions
     if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 4;
-    interactionSubset = getInteractionStackSubset(time);
+    interactionSubset = getInteractionStackSubsetByEventType(time);
 
     var repetitionMap = {}; 
-    for (var i = 0; i < interactionSubset.length; i++) {
-        var curId = interactionSubset[i].dataItem.ial.id;
-        if (repetitionMap.hasOwnProperty(curId)) repetitionMap[curId]++;
-        else repetitionMap[curId] = 1;
+    for (var eventTypeKey in interactionSubset) {
+        var curStack = interactionSubset[eventTypeKey];
+        for (var i = 0; i < curStack.length; i++) {
+            var curId = curStack[i].dataItem.ial.id;
+            if (repetitionMap.hasOwnProperty(eventTypeKey)) { 
+                var curObj = repetitionMap[eventTypeKey]; 
+                if (curObj.hasOwnProperty(curId)) repetitionMap[eventTypeKey][curId]++;
+                else repetitionMap[eventTypeKey][curId] = 1; 
+            } else repetitionMap[eventTypeKey] = { [curId]: 1 };
 
-        if (repetitionMap[curId] > threshold) return true;
+            if (repetitionMap[eventTypeKey][curId] > threshold) return true;
+        }
     }
 
     return false;
