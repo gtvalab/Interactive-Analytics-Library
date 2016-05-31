@@ -1266,10 +1266,6 @@ function getInteractionStackSubset(time) {
                 interactionSubset.push(this.interactionStack[i]);
         }
     }
-
-    for (var i = 0; i < interactionSubset.length; i++) {
-        console.log("Log: " + JSON.stringify(interactionSubset[i])); // emily
-    }
     
     return interactionSubset;
 }
@@ -1390,26 +1386,33 @@ ial.getArray = function(arrayLike) {
 // threshold (optional) - default varies according to which metric is used
 // time (optional) can be given as a Date object or a number representing the number of previous interactions to consider
 // returns true if bias is detected, false otherwise
-ial.computeBias = function(metric, threshold1, time, threshold2) {
+ial.computeBias = function(metric, threshold1, time, threshold2, considerSpan) {
     if (typeof metric === 'undefined') metric = this.BIAS_VARIANCE;
 
-    if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, time); 
+    if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
     else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
     else return ial.computeVarianceBias(threshold1, threshold2, time); 
 }
 
 // bias is defined as repeating the same interaction on the same data
-// threshold is number of interactions allowed with same data item before it is considered bias
-ial.computeRepetitionBias = function(threshold, time) {
-    // TODO: make this threshold more sophisticated -- 
-    // count same interaction on same data? or any interaction on same data? 
-    // consider case of threshold x not being met, but 5 data items have x-1 repeated interactions
-    // consider sensitivity to time frame of repetitions (i.e. there were only 4 but they all happened within a span of 6 interactions)
-    // or there were 10 but they happened over the span of 1000 interactions
-    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 4;
-    interactionSubset = getInteractionStackSubsetByEventType(time);
+// indThreshold is number of interactions allowed with same data item before it is considered bias (default is 4)
+// aggThreshold is sum of weighted scores for individual repetitions allowed before it is considered bias (default is 1)
+// considerSpan = true lowers contributing score of repetitions to account for how spread out they were
+// interactions are weighted: 
+//   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
+//     score doesn't get added to aggregate score unless it surpasses indThreshold
+//   else: score = 1
+ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerSpan) {
+    // TODO: consider larger window sizes... 
+    // e.g. x . . . . . x x x . x x => window size of 5 gives best score of 4/5 but window size of 6 gives score 5/6
+    if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 4;
+    if (typeof aggThreshold === 'undefined' || isNaN(parseFloat(aggThreshold))) aggThreshold = 1;
+    if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
+    var interactionSubset = getInteractionStackSubsetByEventType(time);
+    var origInteractionSubset = getInteractionStackSubset(time); 
 
     var repetitionMap = {}; 
+    var repSum = 0; 
     for (var eventTypeKey in interactionSubset) {
         var curStack = interactionSubset[eventTypeKey];
         for (var i = 0; i < curStack.length; i++) {
@@ -1419,12 +1422,52 @@ ial.computeRepetitionBias = function(threshold, time) {
                 if (curObj.hasOwnProperty(curId)) repetitionMap[eventTypeKey][curId]++;
                 else repetitionMap[eventTypeKey][curId] = 1; 
             } else repetitionMap[eventTypeKey] = { [curId]: 1 };
-
-            if (repetitionMap[eventTypeKey][curId] > threshold) return true;
         }
     }
 
-    return false;
+    for (var eventTypeKey in repetitionMap) {
+        var curStack = repetitionMap[eventTypeKey];
+        for (var curId in curStack) {
+            if (repetitionMap[eventTypeKey][curId] > indThreshold) {
+                if (considerSpan) {
+                    // find first and last occurrence of event type for data item 
+                    var occurrenceIndices = [];
+                    var firstOccurrence = origInteractionSubset.length - 1; 
+                    var lastOccurrence = 0;
+                    var numSeen = 0; 
+
+                    for (var j = 0; j < origInteractionSubset.length; j++) {
+                        var curObj = origInteractionSubset[j];
+                        if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
+                            occurrenceIndices.push(j);
+                            if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
+                        }
+                    }
+
+                    var curSpan = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
+                    var curNum = repetitionMap[eventTypeKey][curId];
+
+                    // find smallest window of size indThreshold + 1
+                    for (var j = 0; j < occurrenceIndices.length; j++) {
+                        for (var k = j + indThreshold; k < occurrenceIndices.length; k++) {
+                            var curDiff = Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1; 
+                            if (curDiff < curSpan) { 
+                                curSpan = curDiff; 
+                                curNum = indThreshold + 1;
+                            }
+                        }
+                    }
+
+                    var origScore = occurrenceIndices.length / (Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1);
+                    if ((curNum / curSpan) > origScore) repSum += (curNum / curSpan);
+                    else repSum += origScore; 
+                } else repSum += 1;
+            } 
+        }
+    }
+
+    if (repSum > aggThreshold) return true; 
+    else return false;
 }
 
 // bias is defined as the percentage of the subset of data that has been interacted with
@@ -1432,7 +1475,7 @@ ial.computeRepetitionBias = function(threshold, time) {
 ial.computeSubsetBias = function(threshold, time) {
     if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.2; 
     if (threshold > 1) threshold = 0.2; 
-    interactionSubset = getInteractionStackSubset(time);
+    var interactionSubset = getInteractionStackSubset(time);
 
     var maxInteractions = Math.min(interactionSubset.length, this.dataSet.length);
 
@@ -1453,8 +1496,8 @@ ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
     // TODO: how to handle categorical attributes
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = -0.75;
     if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
-    interactionSubset = getInteractionStackSubset(time); 
-    attributeValueMap = ial.getAttributeValueMap(); 
+    var interactionSubset = getInteractionStackSubset(time); 
+    var attributeValueMap = ial.getAttributeValueMap(); 
 
     var dataSubset = new Set();
     for (var i = 0; i < interactionSubset.length; i++) dataSubset.add(interactionSubset[i].dataItem);
