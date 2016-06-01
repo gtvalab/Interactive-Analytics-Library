@@ -1421,17 +1421,34 @@ ial.getArray = function(arrayLike) {
 * Bias metrics
 * */
 
-// metric (optional) - defaults to variance
-// threshold (optional) - default varies according to which metric is used
-// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider
+// totalThreshold (optional) how many metrics can return true before it is considered bias (defaults to 2)
+// metric (optional) which bias metric to compute (defaults to compute all metrics)
+// threshold1 and threshold2 (optional) how high or low a metric can be before it is considered bias (default varies according to which metric is used)
+// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full stack) 
 // returns true if bias is detected, false otherwise
-ial.computeBias = function(metric, threshold1, time, threshold2, considerSpan) {
-    if (typeof metric === 'undefined') metric = this.BIAS_VARIANCE;
+ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2, considerSpan) {
+    if (typeof totalThreshold === 'undefined' || isNaN(parseFloat(totalThreshold))) totalThreshold = 2;
 
-    if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(threshold1, time);
-    else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
-    else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
-    else return ial.computeVarianceBias(threshold1, threshold2, time); 
+    if (typeof metric !== 'undefined') {
+        if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(threshold1, time);
+        else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
+        else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
+        else return ial.computeVarianceBias(threshold1, threshold2, time); 
+    } else {
+        var attributeWeightBias = ial.computeAttributeWeightBias(threshold1, time);
+        var repetitionBias = ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
+        var subsetBias = ial.computeSubsetBias(threshold1, time); 
+        var varianceBias = ial.computeVarianceBias(threshold1, threshold2, time); 
+
+        var numBiases = 0; 
+        if (attributeWeightBias) numBiases++; 
+        if (repetitionBias) numBiases++; 
+        if (subsetBias) numBiases++; 
+        if (varianceBias) numBiases++; 
+
+        if (numBiases > totalThreshold) return true; 
+        else return false; 
+    }
 }
 
 // bias is defined as repeating the same interaction on the same data
