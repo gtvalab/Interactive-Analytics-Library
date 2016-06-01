@@ -29,7 +29,9 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     this.sessionLogs = [];
     
     this.interactionStack = [];
+    this.attributeWeightVectorStack = [];
     this.maxStackSize = 500;
+    this.BIAS_ATTRIBUTE_WEIGHT = "bias_attribute_weight";
     this.BIAS_VARIANCE = "bias_variance";
     this.BIAS_SUBSET = "bias_subset";
     this.BIAS_REPETITION = "bias_repetition";
@@ -353,6 +355,10 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    attributeWeightVectorStackPush(logObj);
+
     if(logEvent==true){
         this.sessionLogs.push(logObj);
     }
@@ -391,6 +397,10 @@ ial.updateAttributeWeight = function(attribute,increment,logEvent,additionalLogI
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    attributeWeightVectorStackPush(logObj);
+
     if(logEvent==true){
         this.sessionLogs.push(logObj);
     }
@@ -402,7 +412,14 @@ ial.updateAttributeWeight = function(attribute,increment,logEvent,additionalLogI
 /*
 * Sets the attribute weight vector to the newly passed map
 * */
-ial.setAttributeWeightVector = function(newAttributeWeightVector){
+ial.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additionalLogInfoMap){
+    logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
+    additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
+
+    var logObj = new LogObj(clone(this.attributeWeightVector));
+    logObj.setOldWeight(clone(this.attributeWeightVector));
+    logObj.setEventName('AttributeWeightChange_SETALL');
+
     this.attributeWeightVector = clone(newAttributeWeightVector);
     for(var attribute in this.attributeWeightVector){
         if(this.attributeWeightVector[attribute]>1.0){
@@ -411,6 +428,18 @@ ial.setAttributeWeightVector = function(newAttributeWeightVector){
         if(this.attributeWeightVector[attribute]<0.0){
             this.attributeWeightVector[attribute] = 0.0
         }
+    }
+
+    logObj.setNewWeight(clone(this.attributeWeightVector));
+    if(additionalLogInfoMap!={}){
+        logObj.setCustomLogInfo(additionalLogInfoMap);
+    }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    attributeWeightVectorStackPush(logObj);
+
+    if(logEvent==true){
+        this.sessionLogs.push(logObj);
     }
 
     if(this.useNormalizedAttributeWeights==1){
@@ -439,7 +468,7 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj();
+    var logObj = new LogObj(clone(ial.printAttributeWeightVectorStack));
     logObj.setOldWeight(clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_RESET');
 
@@ -451,6 +480,10 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    attributeWeightVectorStackPush(logObj);
+
     if(logEvent==true){
         this.sessionLogs.push(logObj);
     }
@@ -471,7 +504,7 @@ ial.nullifyAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj();
+    var logObj = new LogObj(clone(this.attributeWeightVector));
     logObj.setOldWeight(clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_NULLIFY');
 
@@ -483,6 +516,10 @@ ial.nullifyAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    attributeWeightVectorStackPush(logObj);
+
     if(logEvent==true){
         this.sessionLogs.push(logObj);
     }
@@ -796,27 +833,6 @@ ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
     if(this.useNormalizedAttributeWeights==1){
         tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
     }
-
-    //---------------------------
-    // old difference based logic
-    //---------------------------
-    /*
-    for(var attribute in this.attributeWeightVector){
-        var val1 = this.getNormalizedAttributeValue(points[0][attribute],attribute);
-        var val2 = this.getNormalizedAttributeValue(points[1][attribute],attribute);
-        if(this.attributeValueMap[attribute]['dataType']!='categorical'){
-            var diff = Math.abs(val1-val2);
-            tempAttributeWeightVector[attribute] = 1.0-diff;
-        }else{
-            if(val1 == val2){
-                tempAttributeWeightVector[attribute] = 1.0;
-            }else{
-                tempAttributeWeightVector[attribute] = 0.0;
-            }
-        }
-    }
-    console.log(tempAttributeWeightVector)
-    */
 
     return tempAttributeWeightVector;
 };
@@ -1217,7 +1233,7 @@ LogObj.prototype.setCustomLogInfo = function(customLogInfoMap) {
 
 
 /*
-* Interaction stack utilities
+* Interaction and attribute weight vector stack utilities
 * */
 
 ial.getInteractionStack = function() {
@@ -1241,8 +1257,33 @@ function interactionStackPush(obj) {
 
 // private 
 function interactionStackPop() {
-    this.interactionStack = ial.printInteractionStack(); 
+    this.interactionStack = ial.getInteractionStack(); 
     return this.interactionStack.pop(); 
+}
+
+ial.getAttributeWeightVectorStack = function() {
+    return this.attributeWeightVectorStack;
+}
+
+// print the contents of the interaction stack
+ial.printAttributeWeightVectorStack = function() {
+    console.log("Printing Attribute Weight Vector Stack (" + this.attributeWeightVectorStack.length + "): ");
+    for (var i in this.attributeWeightVectorStack) console.log(this.attributeWeightVectorStack[i]);
+}
+
+// private 
+function attributeWeightVectorStackPush(obj) {
+    if (typeof obj === 'undefined' || obj == null) return;
+
+    this.attributeWeightVectorStack = ial.getAttributeWeightVectorStack(); 
+    if (this.attributeWeightVectorStack.length >= this.maxStackSize) attributeWeightVectorStackPop(); 
+    this.attributeWeightVectorStack.push(obj); 
+}
+
+// private 
+function attributeWeightVectorStackPop() {
+    this.attributeWeightVectorStack = ial.getInteractionStack(); 
+    return this.attributeWeightVectorStack.pop(); 
 }
 
 // private
@@ -1257,7 +1298,7 @@ function getInteractionStackSubset(time) {
             interactionSubset = []; 
             for (var i = 0; i < this.interactionStack.length; i++) {
                 var curTime = this.interactionStack[i].eventTimeStamp;
-                if (curTime.getTime() >= time.getTime()) interactionSubset.push(interactionStack[i]);
+                if (curTime.getTime() >= time.getTime()) interactionSubset.push(this.interactionStack[i]);
             }
         } else if (!isNaN(parseInt(time))) {
             interactionSubset = [];
@@ -1313,30 +1354,28 @@ function getInteractionStackSubsetByEventType(time) {
 }
 
 // private
-function computeAverageDataItem(data) {
-    // TODO: account for categorical attributes; currently just taking 1st value
-    var avgData = {}; 
-    var attributeValueMap = ial.getAttributeValueMap(); 
-    var numericAttributeCounter = {}; 
+// arg can be a Date object; returns all interactions that occurred since 'time'
+// arg can be an integer; returns the last 'time' interactions
+function getWeightVectorStackSubset(time) {
+    this.attributeWeightVectorStack = ial.getAttributeWeightVectorStack();
+    weightVectorSubset = ial.getAttributeWeightVectorStack();
 
-    // sum up all of the numerical attributes
-    for (var dataItem of data) {
-        for (var attr in attributeValueMap) {
-            if (avgData.hasOwnProperty(attr)) {
-                if (attributeValueMap[attr].dataType == 'numeric') {
-                    avgData[attr] = Number(avgData[attr]) + Number(dataItem[attr]);
-                    numericAttributeCounter[attr]++;
-                }
-            } else {
-                if (attributeValueMap[attr].dataType == 'numeric') numericAttributeCounter[attr] = 1;
-                avgData[attr] = dataItem[attr];
+    if (typeof time !== 'undefined') {
+        if (time instanceof Date) {
+            weightVectorSubset = []; 
+            for (var i = 0; i < this.attributeWeightVectorStack.length; i++) {
+                var curTime = this.attributeWeightVectorStack[i].eventTimeStamp;
+                if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(this.attributeWeightVectorStack[i]);
             }
+        } else if (!isNaN(parseInt(time))) {
+            weightVectorSubset = [];
+            if (time > this.attributeWeightVectorStack.length) time = this.attributeWeightVectorStack.length;
+            for (var i = 0; i < time; i++) 
+                weightVectorSubset.push(this.attributeWeightVectorStack[i]);
         }
     }
-
-    // average all of the numerical attributes
-    for (var attr in numericAttributeCounter) avgData[attr] /= Number(numericAttributeCounter[attr]);
-    return avgData;
+    
+    return weightVectorSubset;
 }
 
 // private
@@ -1389,24 +1428,23 @@ ial.getArray = function(arrayLike) {
 ial.computeBias = function(metric, threshold1, time, threshold2, considerSpan) {
     if (typeof metric === 'undefined') metric = this.BIAS_VARIANCE;
 
-    if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
+    if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(threshold1, time);
+    else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
     else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
     else return ial.computeVarianceBias(threshold1, threshold2, time); 
 }
 
 // bias is defined as repeating the same interaction on the same data
-// indThreshold is number of interactions allowed with same data item before it is considered bias (default is 4)
-// aggThreshold is sum of weighted scores for individual repetitions allowed before it is considered bias (default is 1)
+// indThreshold (optional) is number of interactions allowed with same data item before it is considered bias (default is 4)
+// aggThreshold (optional) is sum of weighted scores for individual repetitions allowed before it is considered bias (default is 0.9)
 // considerSpan = true lowers contributing score of repetitions to account for how spread out they were
 // interactions are weighted: 
 //   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
 //     score doesn't get added to aggregate score unless it surpasses indThreshold
 //   else: score = 1
 ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerSpan) {
-    // TODO: consider larger window sizes... 
-    // e.g. x . . . . . x x x . x x => window size of 5 gives best score of 4/5 but window size of 6 gives score 5/6
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 4;
-    if (typeof aggThreshold === 'undefined' || isNaN(parseFloat(aggThreshold))) aggThreshold = 1;
+    if (typeof aggThreshold === 'undefined' || isNaN(parseFloat(aggThreshold))) aggThreshold = 0.9;
     if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
     var interactionSubset = getInteractionStackSubsetByEventType(time);
     var origInteractionSubset = getInteractionStackSubset(time); 
@@ -1430,9 +1468,9 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
         for (var curId in curStack) {
             if (repetitionMap[eventTypeKey][curId] > indThreshold) {
                 if (considerSpan) {
+
                     // find indices of when eventTypeKey occurred with data item curId
                     var occurrenceIndices = [];
-
                     for (var j = 0; j < origInteractionSubset.length; j++) {
                         var curObj = origInteractionSubset[j];
                         if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
@@ -1467,9 +1505,9 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
 }
 
 // bias is defined as the percentage of the subset of data that has been interacted with
-// threshold (optional) can be 0-1 (defaults to 0.2)
+// threshold (optional) can be 0-1 (defaults to 0.25)
 ial.computeSubsetBias = function(threshold, time) {
-    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.2; 
+    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold)) || threshold > 1 || threshold < 0) threshold = 0.25; 
     if (threshold > 1) threshold = 0.2; 
     var interactionSubset = getInteractionStackSubset(time);
 
@@ -1486,19 +1524,18 @@ ial.computeSubsetBias = function(threshold, time) {
 }
 
 // bias is defined as the variance between the data that has been examined
-// indThreshold (optional) indicates how much of a decrease in variance is tolerated (defaults to -0.75)
+// indThreshold (optional) indicates how much of a decrease in variance is tolerated (defaults to -0.5)
 // percAttrThreshold (optional) indicates what percentage of attributes can be below indThreshold (defaults to 0.5)
 ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
     // TODO: how to handle categorical attributes
-    if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = -0.75;
-    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
+    if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = -0.5;
+    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold > 1 || percAttrThreshold < 0) percAttrThreshold = 0.5;
     var interactionSubset = getInteractionStackSubset(time); 
     var attributeValueMap = ial.getAttributeValueMap(); 
 
     var dataSubset = new Set();
     for (var i = 0; i < interactionSubset.length; i++) dataSubset.add(interactionSubset[i].dataItem);
     
-    // var avgDataItem = computeAverageDataItem(dataSubset);
     var numNumericalAttributes = 0;
     var numViolations = 0; 
     for (var attr in attributeValueMap) {
@@ -1511,6 +1548,36 @@ ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
     }
 
     if ((numViolations / numNumericalAttributes) > percAttrThreshold) return true;
+    else return false; 
+}
+
+// bias is defined as the change in the distribution of attribute weights
+// threshold (optional) can be 0-1 (defaults to 0.1)
+ial.computeAttributeWeightBias = function(threshold, time) {
+    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold)) || threshold > 1 || threshold < 0) threshold = 0.1; 
+    var weightVectorSubset = getWeightVectorStackSubset(time); 
+
+    var aggScore = 0; 
+    for (var i = 0; i < weightVectorSubset.length; i++) {
+        var curScore = 0;
+        var oldVector = weightVectorSubset[i].oldWeight; 
+        var newVector = weightVectorSubset[i].newWeight; 
+        var changeVector = {};
+
+        for (var curAttr in oldVector) {
+            curChange = Math.abs(newVector[curAttr] - oldVector[curAttr]);
+            if (oldVector[curAttr] != 0) curChange /= oldVector[curAttr];
+            else curChange = 1;  
+            changeVector[curAttr] = curChange; 
+            curScore += curChange; 
+        }
+        aggScore += Math.min(curScore / Object.keys(changeVector).length, 1); 
+    }
+
+    aggScore /= weightVectorSubset.length; 
+    
+    // if weight vectors haven't changed at least as much as threshold, then return true
+    if (aggScore < threshold) return true; 
     else return false; 
 }
 
