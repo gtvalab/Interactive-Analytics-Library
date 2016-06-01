@@ -1430,11 +1430,8 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
         for (var curId in curStack) {
             if (repetitionMap[eventTypeKey][curId] > indThreshold) {
                 if (considerSpan) {
-                    // find first and last occurrence of event type for data item 
+                    // find indices of when eventTypeKey occurred with data item curId
                     var occurrenceIndices = [];
-                    var firstOccurrence = origInteractionSubset.length - 1; 
-                    var lastOccurrence = 0;
-                    var numSeen = 0; 
 
                     for (var j = 0; j < origInteractionSubset.length; j++) {
                         var curObj = origInteractionSubset[j];
@@ -1445,22 +1442,21 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
                     }
 
                     var curSpan = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
-                    var curNum = repetitionMap[eventTypeKey][curId];
+                    var bestWindowSize = occurrenceIndices.length;
+                    var bestScore = bestWindowSize / curSpan;
 
-                    // find smallest window of size indThreshold + 1
-                    for (var j = 0; j < occurrenceIndices.length; j++) {
-                        for (var k = j + indThreshold; k < occurrenceIndices.length; k++) {
-                            var curDiff = Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1; 
-                            if (curDiff < curSpan) { 
-                                curSpan = curDiff; 
-                                curNum = indThreshold + 1;
+                    // find best window size (number of repeated interactions to consider) - must be greater than indThreshold
+                    for (var windowSize = indThreshold + 1; windowSize <= occurrenceIndices.length; windowSize++) {
+                        for (var j = 0; j < occurrenceIndices.length; j++) {
+                            for (var k = j + windowSize - 1; k < occurrenceIndices.length; k++) {
+                                curSpan = Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1; 
+                                var curScore = windowSize / curSpan; 
+                                if (curScore > bestScore) bestScore = curScore; 
                             }
                         }
                     }
 
-                    var origScore = occurrenceIndices.length / (Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1);
-                    if ((curNum / curSpan) > origScore) repSum += (curNum / curSpan);
-                    else repSum += origScore; 
+                    repSum += bestScore; 
                 } else repSum += 1;
             } 
         }
