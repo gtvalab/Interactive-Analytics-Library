@@ -67,14 +67,16 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
                         'max': parseFloat(passedData[0][attribute]),
                         'mean': parseFloat(passedData[0][attribute]),
                         'variance': parseFloat(passedData[0][attribute]),
+                        'distribution': {},
                         'dataType': 'numeric'
                     };
-                }else{ // need to change this part to handle categorical values
+                }else{ // TODO: need to change this part to handle categorical values
                     this.attributeValueMap[attribute] = {
                         'min': passedData[0][attribute],
                         'max': passedData[0][attribute],
                         'mean': passedData[0][attribute],
                         'variance': passedData[0][attribute],
+                        'distribution': {},
                         'dataType': 'categorical'
                     };
                 }
@@ -119,25 +121,32 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     }
 
     /*
-    * find normalized values and mean
+    * find normalized values and mean for numerical attributes and find distribution of categorical attributes
     * */
     for (var attribute in this.attributeValueMap) {
-        var attrMean = 0; 
-        for(var index in passedData){
-            var dataItem = passedData[index];
-            if(!isNaN(dataItem[attribute])){
+        var attrMean = 0;
+        var curDistribution = {};
+        if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+            for(var index in passedData){
+                var dataItem = passedData[index];
+                var attrValue = dataItem[attribute]
+                attrMean = attrValue;
+                if (curDistribution.hasOwnProperty(attrValue)) curDistribution[attrValue]++; 
+                else curDistribution[attrValue] = 1; 
+            }
+        } else {
+            for(var index in passedData){
+                var dataItem = passedData[index];
                 var curValue = parseFloat(dataItem[attribute]);
                 var curNormValue = curValue - Number(this.attributeValueMap[attribute]['min']); 
                 curNormValue /= Number(this.attributeValueMap[attribute]['max']) - Number(this.attributeValueMap[attribute]['min']);
                 attrMean += curNormValue; 
-            }else{ // TODO: need to change this part to handle categorical values
-                attrMean = dataItem[attribute];
-                break;
             }
         }
         if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
             this.attributeValueMap[attribute]['mean'] = attrMean / passedData.length;
         } else this.attributeValueMap[attribute]['mean'] = attrMean; 
+        this.attributeValueMap[attribute]['distribution'] = curDistribution;
     }
 
     /* 
@@ -234,6 +243,13 @@ var getNormalizedMap = function (inputMap) {
     return inputMap;
 };
 
+
+/*
+* returns the dataset
+* */
+ial.getData = function() {
+    return this.dataSet; 
+}
 
 /*
  * sets weight to new value
@@ -1381,31 +1397,74 @@ function getWeightVectorStackSubset(time) {
 // private
 // uses normalized attribute values
 function computeAttributeVariance(data, attr) {
-    // TODO: account for categorical variables
     data = ial.getArray(data);
     var mean = 0; 
     var attributeValueMap = ial.getAttributeValueMap();
-    if (attributeValueMap[attr].dataType != 'numeric') return 0; 
+    if (attributeValueMap[attr].dataType == 'categorical') {
+        var totalDistr = clone(attributeValueMap[attr]['distribution']);
+        var totalDistrSum = 0; 
+        for (var curAttr in totalDistr) totalDistrSum += Number(totalDistr[curAttr]);
+        
+        var subDistr = computeCategoricalDistribution(data, attr);
+        var subDistrSum = 0; 
+        for (var curAttr in subDistr) subDistrSum += Number(subDistr[curAttr]);
 
-    for (var curDataItem of data) {
-        var curValue = parseFloat(curDataItem[attr]);
-        var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
-        curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
-        mean += curNormValue;
+        // calculate entropy in each distribution: H(x) = SUM(p(x_i)*log_2(p(x_i)))
+        var totalEntropy = 0;
+        var subEntropy = 0;
+        for (var attrValue in totalDistr) {
+            var curTotal = Number(totalDistr[attrValue]);
+            var curProb = (curTotal / totalDistrSum) * Math.log2(curTotal / totalDistrSum);
+            totalEntropy += curProb;
+
+            if (subDistr.hasOwnProperty(attrValue)) {
+                var curSub = Number(subDistr[attrValue]);
+                var curProb = (curSub / subDistrSum) * Math.log2(curSub / subDistrSum);
+                subEntropy += curProb;
+            } 
+        }
+        totalEntropy *= -1; 
+        subEntropy *= -1; 
+        var entropy = Math.abs(subEntropy - totalEntropy) / totalEntropy;
+
+        return entropy; 
+    } else if (attributeValueMap[attr].dataType == 'numeric') {
+        for (var curDataItem of data) {
+            var curValue = parseFloat(curDataItem[attr]);
+            var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
+            curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+            mean += curNormValue;
+        }
+        mean /= data.length;
+
+        var variance = 0; 
+        for (var curDataItem of data) {
+            var curValue = parseFloat(curDataItem[attr]);
+            var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
+            curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+            var curSqDiff = (curNormValue - mean) * (curNormValue - mean); 
+            variance += curSqDiff;
+        }
+        variance /= data.length;
+
+        return variance; 
+    } else return 0; 
+}
+
+// private
+// computes distribution of categorical attribute values
+function computeCategoricalDistribution(data, attr) {
+    data = ial.getArray(data);
+    var attributeValueMap = ial.getAttributeValueMap(); 
+    var distribution = {}; 
+
+    for (var i = 0; i < data.length; i++) {
+        var attrValue = data[i][attr];
+        if (distribution.hasOwnProperty(attrValue)) distribution[attrValue]++; 
+        else distribution[attrValue] = 1;
     }
-    mean /= data.length;
 
-    var variance = 0; 
-    for (var curDataItem of data) {
-        var curValue = parseFloat(curDataItem[attr]);
-        var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
-        curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
-        var curSqDiff = (curNormValue - mean) * (curNormValue - mean); 
-        variance += curSqDiff;
-    }
-    variance /= data.length;
-
-    return variance; 
+    return distribution; 
 }
 
 // private 
@@ -1426,7 +1485,7 @@ ial.getArray = function(arrayLike) {
 // threshold1 and threshold2 (optional) how high or low a metric can be before it is considered bias (default varies according to which metric is used)
 // time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full stack) 
 // returns true if bias is detected, false otherwise
-ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2, considerSpan) {
+ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2, considerSpan, threshold3) {
     if (typeof totalThreshold === 'undefined' || isNaN(parseFloat(totalThreshold))) totalThreshold = 2;
 
     if (typeof metric !== 'undefined') {
@@ -1438,7 +1497,7 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
         var attributeWeightBias = ial.computeAttributeWeightBias(threshold1, time);
         var repetitionBias = ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
         var subsetBias = ial.computeSubsetBias(threshold1, time); 
-        var varianceBias = ial.computeVarianceBias(threshold1, threshold2, time); 
+        var varianceBias = ial.computeVarianceBias(threshold1, threshold2, threshold3, time); 
 
         var numBiases = 0; 
         if (attributeWeightBias) numBiases++; 
@@ -1541,11 +1600,12 @@ ial.computeSubsetBias = function(threshold, time) {
 }
 
 // bias is defined as the variance between the data that has been examined
-// indThreshold (optional) indicates how much of a decrease in variance is tolerated (defaults to -0.5)
+// indNumThreshold (optional) indicates how much of a decrease in variance is tolerated for numerical attributes (defaults to -0.5)
+// indCatThreshold (optional) indicates the maximum percent change in entropy allowed for the distribution of categorical attributes (defaults to 0.5)
 // percAttrThreshold (optional) indicates what percentage of attributes can be below indThreshold (defaults to 0.5)
-ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
-    // TODO: how to handle categorical attributes
-    if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = -0.5;
+ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThreshold, time) {
+    if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold))) indNumThreshold = -0.5;
+    if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold))) indCatThreshold = 0.5;
     if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold > 1 || percAttrThreshold < 0) percAttrThreshold = 0.5;
     var interactionSubset = getInteractionStackSubset(time); 
     var attributeValueMap = ial.getAttributeValueMap(); 
@@ -1553,18 +1613,23 @@ ial.computeVarianceBias = function(indThreshold, percAttrThreshold, time) {
     var dataSubset = new Set();
     for (var i = 0; i < interactionSubset.length; i++) dataSubset.add(interactionSubset[i].dataItem);
     
-    var numNumericalAttributes = 0;
+    var numAttributes = 0;
     var numViolations = 0; 
     for (var attr in attributeValueMap) {
         if (attributeValueMap[attr].dataType == 'numeric') {
-            numNumericalAttributes++; 
+            numAttributes++; 
             var curVariance = Number(computeAttributeVariance(dataSubset, attr));
             var curChange = (curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance']); 
-            if (curChange < indThreshold) numViolations++;
+            if (curChange < indNumThreshold) numViolations++;
+        } else if (attributeValueMap[attr].dataType == 'categorical') {
+            numAttributes++; 
+            var curVariance = Number(computeAttributeVariance(dataSubset, attr));
+            // variance for categorical attributes returns % change in entropy 
+            if (curVariance > indCatThreshold) numViolations++; 
         }
     }
 
-    if ((numViolations / numNumericalAttributes) > percAttrThreshold) return true;
+    if ((numViolations / numAttributes) > percAttrThreshold) return true;
     else return false; 
 }
 
@@ -1585,6 +1650,7 @@ ial.computeAttributeWeightBias = function(threshold, time) {
             curChange = Math.abs(newVector[curAttr] - oldVector[curAttr]);
             if (oldVector[curAttr] != 0) curChange /= oldVector[curAttr];
             else curChange = 1;  
+            if (curChange > 1) curChange = 1; // don't want change to exceed 1 for any given attribute
             changeVector[curAttr] = curChange; 
             curScore += curChange; 
         }
