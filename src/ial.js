@@ -1520,19 +1520,27 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
         else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time); 
         else return ial.computeVarianceBias(threshold1, threshold2, time); 
     } else {
+        var biasResult = {}; 
         var attributeWeightBias = ial.computeAttributeWeightBias(threshold1, time);
         var repetitionBias = ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan); 
         var subsetBias = ial.computeSubsetBias(threshold1, time); 
         var varianceBias = ial.computeVarianceBias(threshold1, threshold2, threshold3, time); 
 
-        var numBiases = 0; 
-        if (attributeWeightBias) numBiases++; 
-        if (repetitionBias) numBiases++; 
-        if (subsetBias) numBiases++; 
-        if (varianceBias) numBiases++; 
+        biasResult['attribute_weight_metric'] = attributeWeightBias; 
+        biasResult['repetition_metric'] = repetitionBias; 
+        biasResult['subset_metric'] = subsetBias; 
+        biasResult['variance_metric'] = varianceBias; 
 
-        if (numBiases > totalThreshold) return true; 
-        else return false; 
+        var numBiases = 0; 
+        if (attributeWeightBias['result']) numBiases++; 
+        if (repetitionBias['result']) numBiases++; 
+        if (subsetBias['result']) numBiases++; 
+        if (varianceBias['result']) numBiases++; 
+
+        if (numBiases > totalThreshold) biasResult['result'] = true;  
+        else biasResult['result'] = false; 
+
+        return biasResult; 
     }
 }
 
@@ -1629,8 +1637,7 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     else currentLog['result'] = false;
     this.biasLogs.push(currentLog);
 
-    if (repSum > aggThreshold) return true; 
-    else return false;
+    return currentLog; 
 }
 
 // bias is defined as the percentage of the subset of data that has been interacted with
@@ -1664,8 +1671,7 @@ ial.computeSubsetBias = function(threshold, time) {
     else currentLog['result'] = false; 
     this.biasLogs.push(currentLog);
 
-    if (percentUnique < threshold)  return true; 
-    else return false; 
+    return currentLog; 
 }
 
 // bias is defined as the variance between the data that has been examined
@@ -1713,8 +1719,7 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
     else currentLog['result'] = false; 
     this.biasLogs.push(currentLog);
 
-    if ((numViolations / numAttributes) > percAttrThreshold) return true;
-    else return false; 
+    return currentLog; 
 }
 
 // bias is defined as the change in the distribution of attribute weights
@@ -1759,13 +1764,12 @@ ial.computeAttributeWeightBias = function(threshold, time) {
 
     currentLogInfo['score'] = aggScore;
     currentLog['info'] = currentLogInfo; 
+    // if weight vectors haven't changed at least as much as threshold, then return true
     if (aggScore < threshold) currentLog['result'] = true; 
     else currentLog['result'] = false;
     this.biasLogs.push(currentLog);
 
-    // if weight vectors haven't changed at least as much as threshold, then return true
-    if (aggScore < threshold) return true; 
-    else return false; 
+    return currentLog; 
 }
 
 
