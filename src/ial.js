@@ -1548,7 +1548,7 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
 
 // bias is defined as repeating the same interaction on the same data
 // indThreshold (optional) is number of interactions allowed with same data item before it is considered bias (defaults to 0.025 * size of data)
-// aggThreshold (optional) is average weighted score for individual repetitions allowed before it is considered bias (default is 0.9)
+// percIntThreshold (optional) is percentage of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
 // considerSpan = true lowers contributing score of repetitions to account for how spread out they were
 // interactions are weighted: 
 //   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
@@ -1556,7 +1556,7 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
 //   else: score = 1
 ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerSpan) {
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 0.025 * this.dataSet.length;
-    if (typeof aggThreshold === 'undefined' || isNaN(parseFloat(aggThreshold))) aggThreshold = 0.9;
+    if (typeof percIntThreshold === 'undefined' || isNaN(parseFloat(percIntThreshold))) percIntThreshold = 0.025;
     if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
     var interactionSubset = getInteractionStackSubsetByEventType(time);
     var origInteractionSubset = getInteractionStackSubset(time); 
@@ -1565,13 +1565,13 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     var curDate = new Date(); 
     currentLog['bias_type'] = this.BIAS_REPETITION;
     currentLog['current_time'] = new Date();
-    currentLog['threshold'] = {'individual_threshold' : indThreshold, 'aggregate_threshold' : aggThreshold};
+    currentLog['threshold'] = {'individual_threshold' : indThreshold, 'percent_interaction_threshold' : percIntThreshold};
     var currentLogInfo = {}; 
     currentLogInfo['consider_span'] = considerSpan; 
 
     var repetitionMap = {}; 
-    var repSum = 0; 
     var numLogsCounter = 0; 
+    var intTypeCounter = 0; 
     for (var eventTypeKey in interactionSubset) {
         var curStack = interactionSubset[eventTypeKey];
         for (var i = 0; i < curStack.length; i++) {
@@ -1580,12 +1580,19 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
             if (repetitionMap.hasOwnProperty(eventTypeKey)) { 
                 var curObj = repetitionMap[eventTypeKey]; 
                 if (curObj.hasOwnProperty(curId)) repetitionMap[eventTypeKey][curId]++;
-                else repetitionMap[eventTypeKey][curId] = 1; 
-            } else repetitionMap[eventTypeKey] = { [curId]: 1 };
+                else {
+                    repetitionMap[eventTypeKey][curId] = 1; 
+                    intTypeCounter++;
+                }
+            } else {
+                repetitionMap[eventTypeKey] = { [curId]: 1 };
+                intTypeCounter++;
+            }
         }
     }
     currentLog['number_of_logs'] = numLogsCounter;
 
+    var numViolations = 0; 
     for (var eventTypeKey in repetitionMap) {
         var curStack = repetitionMap[eventTypeKey];
         for (var curId in curStack) {
@@ -1622,10 +1629,10 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
                         }
                     }
 
-                    repSum += bestScore; 
-                    currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'window_size' : bestWindowSize, 'count_used' : bestSpan, 'score' : bestScore, 'result' : true};
+                    numViolations += bestScore; 
+                    currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'window_size' : bestWindowSize, 'span_used' : bestSpan, 'score' : bestScore, 'result' : true};
                 } else {
-                    repSum += 1;
+                    numViolations++; 
                     currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'score' : 1, 'result' : true};
                 }
             } else {
@@ -1634,9 +1641,12 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
         }
     }
 
+    currentLogInfo['num_violations'] = numViolations;
+    currentLogInfo['num_interaction_types'] = intTypeCounter; 
+    currentLogInfo['percentage'] = numViolations / intTypeCounter; 
     currentLog['info'] = currentLogInfo;
-    if (repSum > aggThreshold) currentLog['result'] = true;
-    else currentLog['result'] = false;
+    if ((numViolations / intTypeCounter) > percIntThreshold) currentLog['result'] = true; 
+    else currentLog['result'] = false; 
     this.biasLogs.push(currentLog);
 
     return currentLog; 
@@ -1700,22 +1710,28 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
     
     var numAttributes = 0;
     var numViolations = 0; 
+    var varianceVector = {}; 
     for (var attr in attributeValueMap) {
         if (attributeValueMap[attr].dataType == 'numeric') {
             numAttributes++; 
             var curVariance = Number(computeAttributeVariance(dataSubset, attr));
             var curChange = Math.abs((curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance'])); 
             if (curChange > indNumThreshold) numViolations++;
-            currentLogInfo[attr] = curVariance; 
+            varianceVector[attr] = curVariance; 
         } else if (attributeValueMap[attr].dataType == 'categorical') {
             numAttributes++; 
             var curVariance = Number(computeAttributeVariance(dataSubset, attr));
             // variance for categorical attributes returns % change in entropy 
             if (curVariance > indCatThreshold) numViolations++; 
+            varianceVector[attr] = curVariance; 
             currentLogInfo[attr] = curVariance;
         }
     }
 
+    currentLogInfo['variance_vector'] = varianceVector; 
+    currentLogInfo['num_violations'] = numViolations;
+    currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
+    currentLogInfo['percentage'] = numViolations / numAttributes;
     currentLog['info'] = currentLogInfo;
     if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
     else currentLog['result'] = false; 
@@ -1817,45 +1833,13 @@ ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, score
         currentLogInfo['average_change_vector'] = changeVector;
     } 
 
-    currentLogInfo['violations'] = numViolations; 
-    currentLogInfo['score'] = numViolations / numAttributes;
+    currentLogInfo['num_violations'] = numViolations; 
+    currentLogInfo['num_attributes'] = numAttributes;
+    currentLogInfo['percentage'] = numViolations / numAttributes;
     currentLog['info'] = currentLogInfo;  
     if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
     else currentLog['result'] = false; 
 
-
-
-    /*var aggScore = 0; 
-    for (var i = 0; i < weightVectorSubset.length; i++) {
-        var curScore = 0;
-        var oldVector = weightVectorSubset[i].oldWeight; 
-        var newVector = weightVectorSubset[i].newWeight; 
-        var changeVector = {};
-        currentLogInfo[i + "_old"] = oldVector;
-        currentLogInfo[i + "_new"] = newVector; 
-
-        for (var curAttr in oldVector) {
-            curChange = Math.abs(newVector[curAttr] - oldVector[curAttr]);
-            if (curChange != 0) {
-                if (oldVector[curAttr] != 0) curChange /= oldVector[curAttr];
-                if (curChange > 1) curChange = 1; // don't want change to exceed 1 for any given attribute
-            }
-            changeVector[curAttr] = curChange; 
-            curScore += curChange; 
-        }
-        var scaledCurScore = Math.min(curScore / Object.keys(changeVector).length, 1);
-        aggScore += scaledCurScore; 
-        currentLogInfo[i + "_percent_change"] = changeVector; 
-        currentLogInfo[i + "_score"] = scaledCurScore;
-    }
-
-    aggScore /= weightVectorSubset.length; 
-
-    currentLogInfo['score'] = aggScore;
-    currentLog['info'] = currentLogInfo; 
-    // if weight vectors haven't changed at least as much as threshold, then return true
-    if (aggScore < threshold) currentLog['result'] = true; 
-    else currentLog['result'] = false;*/
     this.biasLogs.push(currentLog);
 
     return currentLog; 
