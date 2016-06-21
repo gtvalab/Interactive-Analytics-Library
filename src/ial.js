@@ -172,7 +172,7 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
         }
         if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
             this.attributeValueMap[attribute]['variance'] = attrVariance / passedData.length;
-        } else this.attributeValueMap[attribute]['variance'] = attrVariance; 
+        } else this.attributeValueMap[attribute]['variance'] = computeAttributeVariance(this.dataSet, attribute); 
     }
 
     for(var index in passedData){
@@ -1398,38 +1398,21 @@ function getWeightVectorStackSubset(time) {
 
 // private
 // uses normalized attribute values
+// computes variance for numerical attributes and entropy for categorical attributes
 function computeAttributeVariance(data, attr) {
     data = ial.getArray(data);
     var mean = 0; 
     var attributeValueMap = ial.getAttributeValueMap();
     if (attributeValueMap[attr].dataType == 'categorical') {
-        var totalDistr = clone(attributeValueMap[attr]['distribution']);
-        var totalDistrSum = 0; 
-        for (var curAttr in totalDistr) totalDistrSum += Number(totalDistr[curAttr]);
-        
-        var subDistr = computeCategoricalDistribution(data, attr);
-        var subDistrSum = 0; 
-        for (var curAttr in subDistr) subDistrSum += Number(subDistr[curAttr]);
-
-        // calculate entropy in each distribution: H(x) = SUM(p(x_i)*log_2(p(x_i)))
-        var totalEntropy = 0;
-        var subEntropy = 0;
-        for (var attrValue in totalDistr) {
-            var curTotal = Number(totalDistr[attrValue]);
-            var curProb = (curTotal / totalDistrSum) * Math.log2(curTotal / totalDistrSum);
-            totalEntropy += curProb;
-
-            if (subDistr.hasOwnProperty(attrValue)) {
-                var curSub = Number(subDistr[attrValue]);
-                var curProb = (curSub / subDistrSum) * Math.log2(curSub / subDistrSum);
-                subEntropy += curProb;
-            } 
+        var distr = computeCategoricalDistribution(data, attr); 
+        var ent = 0; 
+        var curSum = data.length; 
+        for (attrVal in distr) {
+            var curVal = distr[attrVal];
+            ent += ((curVal / curSum) * Math.log2(curVal / curSum));
         }
-        totalEntropy *= -1; 
-        subEntropy *= -1; 
-        var entropy = Math.abs(subEntropy - totalEntropy) / totalEntropy;
-
-        return entropy; 
+        ent *= -1; 
+        return ent; 
     } else if (attributeValueMap[attr].dataType == 'numeric') {
         for (var curDataItem of data) {
             var curValue = parseFloat(curDataItem[attr]);
@@ -1546,9 +1529,48 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
     }
 }
 
+// bias is defined as the percentage of the subset of data that has been interacted with that is unique
+// threshold (optional) can be a percentage 0-1 (defaults to 0.25) or a whole number
+ial.computeSubsetBias = function(threshold, time) {
+    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.25; 
+    var interactionSubset = getInteractionStackSubset(time);
+
+    var currentLog = {}; 
+    currentLog['bias_type'] = this.BIAS_SUBSET;
+    currentLog['current_time'] = new Date();
+    currentLog['threshold'] = threshold;
+    currentLog['number_of_logs'] = interactionSubset.length;
+    var currentLogInfo = {}; 
+
+    var maxInteractions = Math.min(interactionSubset.length, this.dataSet.length);
+
+    // figure out how many interactions were with unique data items
+    var idSet = new Set(); 
+    for (var i = 0; i < interactionSubset.length; i++) 
+        idSet.add(interactionSubset[i].dataItem.ial.id);
+
+    var percentUnique = idSet.size / maxInteractions;
+
+    currentLogInfo['max_interactions'] = maxInteractions; 
+    currentLogInfo['unique_data'] = idSet.size; 
+    currentLogInfo['percentage'] = percentUnique; 
+    currentLog['info'] = currentLogInfo; 
+
+    if (threshold >= 1) {
+        if (idSet.size < threshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    } else {
+        if (percentUnique < threshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    }
+
+    this.biasLogs.push(currentLog);
+    return currentLog; 
+}
+
 // bias is defined as repeating the same interaction on the same data
-// indThreshold (optional) is number of interactions allowed with same data item before it is considered bias (defaults to 0.025 * size of data)
-// percIntThreshold (optional) is percentage of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
+// indThreshold (optional) is percentage or number of interactions allowed with same data item before it is considered bias (defaults to 0.025 * size of data)
+// percIntThreshold (optional) is percentage or number of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
 // considerSpan = true lowers contributing score of repetitions to account for how spread out they were
 // interactions are weighted: 
 //   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
@@ -1556,6 +1578,7 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
 //   else: score = 1
 ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerSpan) {
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 0.025 * this.dataSet.length;
+    if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
     if (typeof percIntThreshold === 'undefined' || isNaN(parseFloat(percIntThreshold))) percIntThreshold = 0.025;
     if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
     var interactionSubset = getInteractionStackSubsetByEventType(time);
@@ -1645,55 +1668,27 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     currentLogInfo['num_interaction_types'] = intTypeCounter; 
     currentLogInfo['percentage'] = numViolations / intTypeCounter; 
     currentLog['info'] = currentLogInfo;
-    if ((numViolations / intTypeCounter) > percIntThreshold) currentLog['result'] = true; 
-    else currentLog['result'] = false; 
+
+    if (percIntThreshold >= 1) {
+        if (numViolations > percIntThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    } else {
+        if ((numViolations / intTypeCounter) > percIntThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    }
+
     this.biasLogs.push(currentLog);
-
-    return currentLog; 
-}
-
-// bias is defined as the percentage of the subset of data that has been interacted with that is unique
-// threshold (optional) can be 0-1 (defaults to 0.25)
-ial.computeSubsetBias = function(threshold, time) {
-    if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold)) || threshold > 1 || threshold < 0) threshold = 0.25; 
-    if (threshold > 1) threshold = 0.25; 
-    var interactionSubset = getInteractionStackSubset(time);
-
-    var currentLog = {}; 
-    currentLog['bias_type'] = this.BIAS_SUBSET;
-    currentLog['current_time'] = new Date();
-    currentLog['threshold'] = threshold;
-    currentLog['number_of_logs'] = interactionSubset.length;
-    var currentLogInfo = {}; 
-
-    var maxInteractions = Math.min(interactionSubset.length, this.dataSet.length);
-
-    // figure out how many interactions were with unique data items
-    var idSet = new Set(); 
-    for (var i = 0; i < interactionSubset.length; i++) 
-        idSet.add(interactionSubset[i].dataItem.ial.id);
-
-    var percentUnique = idSet.size / maxInteractions;
-
-    currentLogInfo['max_interactions'] = maxInteractions; 
-    currentLogInfo['unique_data'] = idSet.size; 
-    currentLogInfo['percentage'] = percentUnique; 
-    currentLog['info'] = currentLogInfo; 
-    if (percentUnique < threshold) currentLog['result'] = true; 
-    else currentLog['result'] = false; 
-    this.biasLogs.push(currentLog);
-
     return currentLog; 
 }
 
 // bias is defined as the variance between the data that has been examined
-// indNumThreshold (optional) indicates the maximum percent change in variance that is tolerated for numerical attributes (defaults to 0.5)
-// indCatThreshold (optional) indicates the maximum percent change in entropy allowed for the distribution of categorical attributes (defaults to 0.5)
-// percAttrThreshold (optional) indicates what percentage of attributes can be below indThreshold (defaults to 0.5)
+// indNumThreshold (optional) indicates the maximum percentage change in variance that is tolerated for numerical attributes (defaults to 0.5)
+// indCatThreshold (optional) indicates the maximum percentage change in entropy allowed for the distribution of categorical attributes (defaults to 0.5)
+// percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThreshold, time) {
-    if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold > 1 || indNumThreshold < 0) indNumThreshold = 0.5;
-    if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold > 1 || indCatThreshold < 0) indCatThreshold = 0.5;
-    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold > 1 || percAttrThreshold < 0) percAttrThreshold = 0.5;
+    if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.5;
+    if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.5;
+    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
     var interactionSubset = getInteractionStackSubset(time); 
     var attributeValueMap = ial.getAttributeValueMap(); 
     
@@ -1711,42 +1706,52 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
     var numAttributes = 0;
     var numViolations = 0; 
     var varianceVector = {}; 
+    var changeVector = {}; 
     for (var attr in attributeValueMap) {
         if (attributeValueMap[attr].dataType == 'numeric') {
             numAttributes++; 
             var curVariance = Number(computeAttributeVariance(dataSubset, attr));
             var curChange = Math.abs((curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance'])); 
             if (curChange > indNumThreshold) numViolations++;
-            varianceVector[attr] = curVariance; 
+            varianceVector[attr] = curVariance;
+            changeVector[attr] = curChange;  
         } else if (attributeValueMap[attr].dataType == 'categorical') {
             numAttributes++; 
+            // variance for categorical attributes returns entropy 
             var curVariance = Number(computeAttributeVariance(dataSubset, attr));
-            // variance for categorical attributes returns % change in entropy 
-            if (curVariance > indCatThreshold) numViolations++; 
+            var curChange = Math.abs((curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance']));
+            if (curChange > indCatThreshold) numViolations++; 
             varianceVector[attr] = curVariance; 
-            currentLogInfo[attr] = curVariance;
+            changeVector[attr] = curChange; 
         }
     }
 
     currentLogInfo['variance_vector'] = varianceVector; 
+    currentLogInfo['change_vector'] = changeVector; 
     currentLogInfo['num_violations'] = numViolations;
     currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
     currentLogInfo['percentage'] = numViolations / numAttributes;
     currentLog['info'] = currentLogInfo;
-    if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
-    else currentLog['result'] = false; 
-    this.biasLogs.push(currentLog);
 
+    if (percAttrThreshold >= 1) {
+        if (numViolations > percAttrThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    } else {
+        if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    }
+    
+    this.biasLogs.push(currentLog);
     return currentLog; 
 }
 
 // bias is defined as the average percent change in the distribution of attribute weights
 // indThreshold (optional) indicates the minimum percent change in an attribute's weight that is tolerated (defaults to 0.5)
-// percAttrThreshold (optional) indicates what percentage of attributes can be below indThreshold (defaults to 0.5)
+// percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 // scoreType (optional) metric for when individual attribute weight change is in violation (span, average, or max)
 ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, scoreType, time) {
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold > 1 || indThreshold < 0) indThreshold = 0.1; 
-    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold > 1 || percAttrThreshold < 0) percAttrThreshold = 0.5; 
+    if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5; 
     if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0]; 
     var weightVectorSubset = getWeightVectorStackSubset(time); 
     var attributeValueMap = ial.getAttributeValueMap(); 
@@ -1837,11 +1842,16 @@ ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, score
     currentLogInfo['num_attributes'] = numAttributes;
     currentLogInfo['percentage'] = numViolations / numAttributes;
     currentLog['info'] = currentLogInfo;  
-    if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
-    else currentLog['result'] = false; 
+
+    if (percAttrThreshold >= 1) {
+        if (numViolations > percAttrThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    } else {
+        if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true; 
+        else currentLog['result'] = false; 
+    }
 
     this.biasLogs.push(currentLog);
-
     return currentLog; 
 }
 
