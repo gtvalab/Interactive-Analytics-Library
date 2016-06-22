@@ -32,12 +32,11 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     this.attributeWeightVectorStack = [];
     this.biasLogs = []; 
     this.maxStackSize = 500;
-    this.BIAS_ATTRIBUTE_WEIGHT = "bias_attribute_weight";
-    this.BIAS_VARIANCE = "bias_variance";
-    this.BIAS_SUBSET = "bias_subset";
-    this.BIAS_REPETITION = "bias_repetition";
-    this.ATTRIBUTE_SCORES = ["span", "average", "max"];
-    this.BIAS_INTERACTION_TYPE_ALL = "interaction_type_all";
+    this.BIAS_ATTRIBUTE_WEIGHT = 'bias_attribute_weight';
+    this.BIAS_VARIANCE = 'bias_variance';
+    this.BIAS_SUBSET = 'bias_subset';
+    this.BIAS_REPETITION = 'bias_repetition';
+    this.ATTRIBUTE_SCORES = ['span', 'average', 'max'];
 
 
     /*
@@ -1311,36 +1310,83 @@ function attributeWeightVectorStackPop() {
 // interactionTypes defines which types of interactions to consider
 function getInteractionStackSubset(time, interactionTypes) {
     this.interactionStack = clone(ial.getInteractionStack());
-    interactionSubset = [];
+    var interactionSubset = [];
 
-    if (typeof time !== 'undefined') {
-        if (time instanceof Date) {
-            for (var i = 0; i < this.interactionStack.length; i++) {
-                var curLog = this.interactionStack[i];
-                var curTime = curLog.eventTimeStamp;
-                var curEventType = curLog['customLogInfo']['eventType'];
-                if (curTime.getTime() >= time.getTime() && interactionTypes.indexOf(curEventType) > -1) 
-                    interactionSubset.push(this.interactionStack[i]);
-            }
-        } else if (!isNaN(parseInt(time))) {
-            if (time > this.interactionStack.length) time = this.interactionStack.length;
-            var numLogs = 0;
-            var i = 0;  
-            while (i < this.interactionStack.length && numLogs <= time) {
-                var curLog = this.interactionStack[i]; 
-                var curEventType = curLog['customLogInfo']['eventType'];
-                interactionSubset.push(curLog);
-            }
-        }
-    } else if (typeof interactionTypes !== 'undefined') {
+    if (typeof time === 'undefined') time = this.interactionStack.length;
+
+    if (time instanceof Date) {
         for (var i = 0; i < this.interactionStack.length; i++) {
             var curLog = this.interactionStack[i];
-            if (interactionTypes.indexOf(curLog['customLogInfo']['eventType']) > -1) 
-                interactionSubset.push(curLog);
+            var curTime = curLog.eventTimeStamp;
+            var curEventType = curLog['customLogInfo']['eventType'];
+            if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) 
+                interactionSubset.push(this.interactionStack[i]);
         }
-    } else return this.interactionStack; 
+    } else if (!isNaN(parseInt(time))) {
+        if (time > this.interactionStack.length) time = this.interactionStack.length;
+        var numLogs = 0;
+        var i = 0;  
+        while (i < this.interactionStack.length && numLogs <= time) {
+            var curLog = this.interactionStack[i]; 
+            var curEventType = curLog['customLogInfo']['eventType'];
+            if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                interactionSubset.push(curLog);
+                numLogs++; 
+            }
+            i++; 
+        }
+    }
     
     return interactionSubset;
+}
+
+// private
+// 'time' can be a Date object; returns all interactions that occurred since 'time'
+// 'time' can be an integer; returns the last 'time' interactions
+// interactionTypes defines which types of interactions to consider
+function getInteractionStackSubsetByEventType(time, interactionTypes) { 
+    this.interactionStack = ial.getInteractionStack();
+    interactionSubsetStacks = {};
+
+    if (typeof time === 'undefined') time = this.interactionStack.length; 
+
+    if (time instanceof Date) {
+        interactionSubsetStacks = {}; 
+        for (var i = 0; i < this.interactionStack.length; i++) {
+            var curLog = this.interactionStack[i];
+            var curTime = curLog.eventTimeStamp;
+            var curEventType = curLog.customLogInfo.eventType;
+            if (curEventType === 'undefined') curEventType = 'uncategorized';
+            if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
+                var curStack = []; 
+                if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType]; 
+
+                curStack.push(curLog);
+                interactionSubsetStacks[curEventType] = curStack;
+            }
+        }
+    } else if (!isNaN(parseInt(time))) {
+        interactionSubsetStacks = {};
+        if (time > this.interactionStack.length) time = this.interactionStack.length;
+        var i = 0; 
+        var numLogs = 0; 
+        while (i < this.interactionStack.length && numLogs <= time) {
+            var curLog = this.interactionStack[i];
+            var curEventType = curLog.customLogInfo.eventType;
+            if (curEventType === 'undefined') curEventType = 'uncategorized';
+            if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                var curStack = []; 
+                if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType]; 
+
+                curStack.push(curLog);
+                interactionSubsetStacks[curEventType] = curStack;
+                numLogs++; 
+            }
+            i++; 
+        }
+    } 
+    
+    return interactionSubsetStacks;
 }
 
 // private
@@ -1504,10 +1550,9 @@ ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2,
 
 // bias is defined as the percentage of the subset of data that has been interacted with that is unique
 // threshold (optional) can be a percentage 0-1 (defaults to 0.25) or a whole number
-// interactionTyps (optional) limits scope of computation to particular interaction types or all if left unspecified
-ial.computeSubsetBias = function(threshold, time, interactionType) {
+// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+ial.computeSubsetBias = function(threshold, time, interactionTypes) {
     if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.25; 
-    if (typeof interactionTypes == 'undefined') interactionTypes = [this.BIAS_INTERACTION_TYPE_ALL];
 
     var interactionSubset = getInteractionStackSubset(time, interactionTypes);
 
@@ -1559,9 +1604,8 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
     if (typeof percIntThreshold === 'undefined' || isNaN(parseFloat(percIntThreshold))) percIntThreshold = 0.025;
     if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
-    if (typeof interactionTypes == 'undefined') interactionTypes = [this.BIAS_INTERACTION_TYPE_ALL];
-    var interactionSubset = getInteractionStackSubset(time, interactionTypes);
-    var origInteractionSubset = getInteractionStackSubset(time, interactionTypes); 
+    var interactionSubset = getInteractionStackSubsetByEventType(time, interactionTypes); 
+    var origInteractionSubset = getInteractionStackSubset(time, interactionTypes);
     
     var currentLog = {};
     var curDate = new Date(); 
@@ -1670,7 +1714,6 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
     if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.5;
     if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.5;
     if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
-    if (typeof interactionTypes == 'undefined') interactionTypes = [this.BIAS_INTERACTION_TYPE_ALL];
     var interactionSubset = getInteractionStackSubset(time, interactionTypes);
     var attributeValueMap = ial.getAttributeValueMap(); 
     
@@ -1683,8 +1726,8 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
     var currentLogInfo = {}; 
     currentLogInfo['interaction_types'] = interactionTypes;
 
-    var dataSubset = new Set();
-    for (var i = 0; i < interactionSubset.length; i++) dataSubset.add(interactionSubset[i].dataItem);
+    var dataSubset = [];
+    for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
     
     var numAttributes = 0;
     var numViolations = 0; 
@@ -1709,7 +1752,7 @@ ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThr
         }
     }
 
-    currentLogInfo['variance_vector'] = varianceVector; 
+    currentLogInfo['variance_vector'] = varianceVector;
     currentLogInfo['change_vector'] = changeVector; 
     currentLogInfo['num_violations'] = numViolations;
     currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
