@@ -38,7 +38,6 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     this.BIAS_REPETITION = 'bias_repetition';
     this.ATTRIBUTE_SCORES = ['span', 'average', 'max'];
 
-
     /*
     * initializing attributeWeightVector and attributeValueMap
     * */
@@ -271,7 +270,7 @@ ial.setItemWeight = function (d,newWeight,logEvent,additionalLogInfoMap) {
     d.ial.weight = newWeight;
 
     // always track item weight changes in interactionStack
-    interactionStackPush(logObj);
+    ial.interactionStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -297,7 +296,7 @@ ial.incrementItemWeight = function (d,increment,logEvent,additionalLogInfoMap) {
     }
 
     // always track item weight changes in interactionStack
-    interactionStackPush(logObj);
+    ial.interactionStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -375,7 +374,7 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
     }
 
     // always track attribute weight changes in attributeWeightVectorStack
-    attributeWeightVectorStackPush(logObj);
+    ial.attributeWeightVectorStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -417,7 +416,7 @@ ial.updateAttributeWeight = function(attribute,increment,logEvent,additionalLogI
     }
 
     // always track attribute weight changes in attributeWeightVectorStack
-    attributeWeightVectorStackPush(logObj);
+    ial.attributeWeightVectorStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -454,7 +453,7 @@ ial.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additi
     }
 
     // always track attribute weight changes in attributeWeightVectorStack
-    attributeWeightVectorStackPush(logObj);
+    ial.attributeWeightVectorStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -500,7 +499,7 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     }
 
     // always track attribute weight changes in attributeWeightVectorStack
-    attributeWeightVectorStackPush(logObj);
+    ial.attributeWeightVectorStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -536,7 +535,7 @@ ial.nullifyAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     }
 
     // always track attribute weight changes in attributeWeightVectorStack
-    attributeWeightVectorStackPush(logObj);
+    ial.attributeWeightVectorStackPush(logObj);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
@@ -1264,17 +1263,15 @@ ial.printInteractionStack = function() {
     for (var i in this.interactionStack) console.log(this.interactionStack[i]);
 }
 
-// private 
-function interactionStackPush(obj) {
+ial.interactionStackPush = function(obj) {
     if (typeof obj === 'undefined' || obj == null) return;
 
     this.interactionStack = ial.getInteractionStack(); 
-    if (this.interactionStack.length >= this.maxStackSize) interactionStackPop(); 
+    if (this.interactionStack.length >= this.maxStackSize) ial.interactionStackPop(); 
     this.interactionStack.push(obj); 
 }
 
-// private 
-function interactionStackPop() {
+ial.interactionStackPop = function() {
     this.interactionStack = ial.getInteractionStack(); 
     return this.interactionStack.pop(); 
 }
@@ -1289,17 +1286,15 @@ ial.printAttributeWeightVectorStack = function() {
     for (var i in this.attributeWeightVectorStack) console.log(this.attributeWeightVectorStack[i]);
 }
 
-// private 
-function attributeWeightVectorStackPush(obj) {
+ial.attributeWeightVectorStackPush = function(obj) {
     if (typeof obj === 'undefined' || obj == null) return;
 
     this.attributeWeightVectorStack = ial.getAttributeWeightVectorStack(); 
-    if (this.attributeWeightVectorStack.length >= this.maxStackSize) attributeWeightVectorStackPop(); 
+    if (this.attributeWeightVectorStack.length >= this.maxStackSize) ial.attributeWeightVectorStackPop(); 
     this.attributeWeightVectorStack.push(obj); 
 }
 
-// private 
-function attributeWeightVectorStackPop() {
+ial.attributeWeightVectorStackPop = function() {
     this.attributeWeightVectorStack = ial.getInteractionStack(); 
     return this.attributeWeightVectorStack.pop(); 
 }
