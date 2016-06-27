@@ -38,9 +38,7 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     this.BIAS_REPETITION = 'bias_repetition';
     this.ATTRIBUTE_SCORES = ['span', 'average', 'max'];
 
-    /*
-    * initializing attributeWeightVector and attributeValueMap
-    * */
+    // initializing attributeWeightVector and attributeValueMap
     var attributeList = Object.keys(passedData[0]);
     for (var attribute in passedData[0]) {
         var shouldConsiderAttribute = 1;
@@ -60,18 +58,26 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
             if(shouldConsiderAttribute==1){
                 this.activeAttributeCount += 1;
                 this.attributeWeightVector[attribute] = 1.0;
+                var isCategorical = false; 
+                var uniqueVals = new Set(); 
+                for (var index in passedData) {
+                    this.dataSet[index]["ial"] = {};
+                    this.dataSet[index]["ial"]["id"] = index;
+                    this.dataSet[index]["ial"]["weight"] = 1;
+                    this.ialIdToDataMap[index] = this.dataSet[index];
+
+                    if (isNaN(this.dataSet[index][attribute])) {
+                        isCategorical = true; 
+                        break;
+                    }
+                    uniqueVals.add(this.dataSet[index][attribute]);
+                }
+
+                // if there are 3 or fewer values, define it as categorical
+                if (uniqueVals.size < 4) isCategorical = true; 
 
                 // note: mean and variance are based on NORMALIZED attribute values
-                if (!isNaN(passedData[0][attribute])){
-                    this.attributeValueMap[attribute] = {
-                        'min': parseFloat(passedData[0][attribute]),
-                        'max': parseFloat(passedData[0][attribute]),
-                        'mean': parseFloat(passedData[0][attribute]),
-                        'variance': parseFloat(passedData[0][attribute]),
-                        'distribution': {},
-                        'dataType': 'numeric'
-                    };
-                }else{ 
+                if (isCategorical) {
                     this.attributeValueMap[attribute] = {
                         'min': passedData[0][attribute],
                         'max': passedData[0][attribute],
@@ -80,104 +86,186 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
                         'distribution': {},
                         'dataType': 'categorical'
                     };
+                } else {
+                    this.attributeValueMap[attribute] = {
+                        'min': parseFloat(passedData[0][attribute]),
+                        'max': parseFloat(passedData[0][attribute]),
+                        'mean': parseFloat(passedData[0][attribute]),
+                        'variance': parseFloat(passedData[0][attribute]),
+                        'distribution': {},
+                        'dataType': 'numeric'
+                    };
                 }
             }
         }
     }
-    if(normalizeAttributeWeights==1){
+
+    if(normalizeAttributeWeights==1) {
         this.useNormalizedAttributeWeights = 1;
         ial.normalizeAttributeWeightVector();
-    }else{
-        this.useNormalizedAttributeWeights = 0;
-    }
+    } else this.useNormalizedAttributeWeights = 0;
 
-    for (var index in passedData) {
-        this.dataSet[index]["ial"] = {};
-        this.dataSet[index]["ial"]["id"] = index;
-        this.dataSet[index]["ial"]["weight"] = 1;
-        this.ialIdToDataMap[index] = this.dataSet[index];
-
-        /*
-        * Finding min max for all attributes
-        * */
-        var dataItem = passedData[index];
-        for(var attribute in this.attributeValueMap){
-            if(!isNaN(dataItem[attribute])){
-                var curValue = parseFloat(dataItem[attribute]);
-                if(curValue<this.attributeValueMap[attribute]['min']){
-                    this.attributeValueMap[attribute]['min'] = curValue;
-                }
-                if(curValue>this.attributeValueMap[attribute]['max']){
-                    this.attributeValueMap[attribute]['max'] = curValue;
-                }
-            }else{ // TODO: need to change this part to handle categorical values
-                if(dataItem[attribute]<this.attributeValueMap[attribute]['min']){
-                    this.attributeValueMap[attribute]['min'] = dataItem[attribute];
-                }
-                if(dataItem[attribute]>this.attributeValueMap[attribute]['max']){
-                    this.attributeValueMap[attribute]['max'] = dataItem[attribute];
-                }
-            }
-        }
-    }
-
-    /*
-    * find normalized values and mean for numerical attributes and find distribution of categorical attributes
-    * */
+    // find mean, min, and max for all attributes
     for (var attribute in this.attributeValueMap) {
-        var attrMean = 0;
-        var curDistribution = {};
-        if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
-            for(var index in passedData){
+        if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+            var curMean = 0; 
+            var curMin = parseFloat(passedData[0][attribute]);
+            var curMax = parseFloat(passedData[0][attribute]);
+            for (var index in passedData) {
                 var dataItem = passedData[index];
-                var attrValue = dataItem[attribute]
-                attrMean = attrValue;
-                if (curDistribution.hasOwnProperty(attrValue)) curDistribution[attrValue]++; 
-                else curDistribution[attrValue] = 1; 
+                var curVal = parseFloat(dataItem[attribute]);
+                if (curVal < curMin) curMin = curVal; 
+                if (curVal > curMax) curMax = curVal; 
+                curMean += curVal; 
             }
-        } else {
-            for(var index in passedData){
+            this.attributeValueMap[attribute]['min'] = curMin; 
+            this.attributeValueMap[attribute]['max'] = curMax; 
+            this.attributeValueMap[attribute]['mean'] = curMean / passedData.length; 
+        } else { // categorical
+            var curDistribution = {};
+            var curMean = passedData[0][attribute]; 
+            var curMin = passedData[0][attribute];
+            var curMax = passedData[0][attribute];
+            for (var index in passedData) {
                 var dataItem = passedData[index];
-                var curValue = parseFloat(dataItem[attribute]);
-                var curNormValue = curValue - Number(this.attributeValueMap[attribute]['min']); 
-                curNormValue /= Number(this.attributeValueMap[attribute]['max']) - Number(this.attributeValueMap[attribute]['min']);
-                attrMean += curNormValue; 
+                var curVal = dataItem[attribute];
+                
+                if (curDistribution.hasOwnProperty(curVal)) curDistribution[curVal]++; 
+                else curDistribution[curVal] = 1; 
+
+                if (curVal < curMin) curMin = curVal; 
+                if (curVal > curMax) curMax = curVal; 
+            }
+            this.attributeValueMap[attribute]['min'] = curMin; 
+            this.attributeValueMap[attribute]['max'] = curMax; 
+            
+            this.attributeValueMap[attribute]['distribution'] = curDistribution; 
+            var keyVals = Object.keys(curDistribution).sort();
+            var halfwayPoint = Math.floor(passedData.length / 2); 
+            var curCount = 0; 
+            for (var i = 0; i < keyVals.length; i++) {
+                var curKey = keyVals[i]; 
+                curCount += curDistribution[curKey];
+                if (curCount >= halfwayPoint) {
+                    this.attributeValueMap[attribute]['mean'] = curKey; 
+                    break;
+                }
             }
         }
-        if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
-            this.attributeValueMap[attribute]['mean'] = attrMean / passedData.length;
-        } else this.attributeValueMap[attribute]['mean'] = attrMean; 
-        this.attributeValueMap[attribute]['distribution'] = curDistribution;
     }
 
-    /* 
-    * find normalized variance
-    * */
+    // find normalized variance
     for (var attribute in this.attributeValueMap) {
-        var attrMean = this.attributeValueMap[attribute]['mean']; 
-        var attrVariance = 0;
-        for(var index in passedData){
-            var dataItem = passedData[index];
-            if(!isNaN(dataItem[attribute])){
-                var curValue = parseFloat(dataItem[attribute]);
-                var curNormValue = curValue - Number(this.attributeValueMap[attribute]['min']); 
-                curNormValue /= Number(this.attributeValueMap[attribute]['max']) - Number(this.attributeValueMap[attribute]['min']);
-                var curSqDiff = (curNormValue - attrMean) * (curNormValue - attrMean);
-                attrVariance += curSqDiff;
-            }else{ // TODO: need to change this part to handle categorical values
-                attrVariance = dataItem[attribute];
-                break;
-            }
-        }
         if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+            var attrMean = parseFloat(this.attributeValueMap[attribute]['mean']); 
+            var curMin = parseFloat(this.attributeValueMap[attribute]['min']);
+            var curMax = parseFloat(this.attributeValueMap[attribute]['max']);
+            var normAttrMean = (attrMean - curMin) / (curMax - curMin);
+            var attrVariance = 0;
+            for (var index in passedData) {
+                var dataItem = passedData[index];
+                if (!isNaN(dataItem[attribute])) {
+                    var curValue = parseFloat(dataItem[attribute]);
+                    var curNormValue = (curValue - curMin) / (curMax - curMin); 
+                    var curSqDiff = (curNormValue - normAttrMean) * (curNormValue - normAttrMean);
+                    attrVariance += curSqDiff;
+                } else {
+                    attrVariance = dataItem[attribute];
+                    break;
+                }
+            }
             this.attributeValueMap[attribute]['variance'] = attrVariance / passedData.length;
-        } else this.attributeValueMap[attribute]['variance'] = computeAttributeVariance(this.dataSet, attribute); 
+        } else {
+            // will compute entropy for categorical variables instead
+            this.attributeValueMap[attribute]['variance'] = computeAttributeVariance(this.dataSet, attribute); 
+        }
     }
 
     for(var index in passedData){
         this.dataSet[index]["ial"]["itemScore"] = parseFloat(getItemScore(this.ialIdToDataMap[index],this.attributeWeightVector));
     }
 };
+
+// set the given list of attributes to categorical
+ial.setCategorical = function(attributeList) {
+    for (var j = 0; j < attributeList.length; j++) {
+        var attribute = attributeList[j];
+        this.attributeValueMap[attribute]['dataType'] = 'categorical';
+
+        var curDistribution = {};
+        var curMean = this.dataSet[0][attribute]; 
+        var curMin = this.dataSet[0][attribute];
+        var curMax = this.dataSet[0][attribute];
+        for (var index in this.dataSet) {
+            var dataItem = this.dataSet[index];
+            var curVal = dataItem[attribute];
+                    
+            if (curDistribution.hasOwnProperty(curVal)) curDistribution[curVal]++; 
+            else curDistribution[curVal] = 1; 
+
+            if (curVal < curMin) curMin = curVal; 
+            if (curVal > curMax) curMax = curVal; 
+        }
+        this.attributeValueMap[attribute]['min'] = curMin; 
+        this.attributeValueMap[attribute]['max'] = curMax; 
+                
+        this.attributeValueMap[attribute]['distribution'] = curDistribution; 
+        var keyVals = Object.keys(curDistribution).sort();
+        var halfwayPoint = Math.floor(this.dataSet.length / 2); 
+        var curCount = 0; 
+        for (var i = 0; i < keyVals.length; i++) {
+            var curKey = keyVals[i]; 
+            curCount += curDistribution[curKey];
+            if (curCount >= halfwayPoint) {
+                this.attributeValueMap[attribute]['mean'] = curKey; 
+                break;
+            }
+        }
+
+        // will compute entropy for categorical variables instead
+        this.attributeValueMap[attribute]['variance'] = computeAttributeVariance(this.dataSet, attribute);
+    }
+}
+
+// set the given list of attributes to numerical
+ial.setNumeric = function(attributeList) {
+    for (var j = 0; j < attributeList.length; j++) {
+        var attribute = attributeList[j];
+        this.attributeValueMap[attribute]['dataType'] = 'numeric';
+        var curMean = 0; 
+        var curMin = parseFloat(this.dataSet[0][attribute]);
+        var curMax = parseFloat(this.dataSet[0][attribute]);
+        for (var index in this.dataSet) {
+            var dataItem = this.dataSet[index];
+            var curVal = parseFloat(dataItem[attribute]);
+            if (curVal < curMin) curMin = curVal; 
+            if (curVal > curMax) curMax = curVal; 
+            curMean += curVal; 
+        }
+        curMean /= this.dataSet.length; 
+        this.attributeValueMap[attribute]['min'] = curMin; 
+        this.attributeValueMap[attribute]['max'] = curMax; 
+        this.attributeValueMap[attribute]['mean'] = curMean; 
+
+        var normAttrMean = (curMean - curMin) / (curMax - curMin);
+        console.log("attr, min, max, mean, norm mean: " + attribute + ", " + this.attributeValueMap[attribute]['min'] + ", " + this.attributeValueMap[attribute]['max'] + ", " + this.attributeValueMap[attribute]['mean'] + ", " + normAttrMean);
+        var attrVariance = 0;
+        for (var index in this.dataSet) {
+            var dataItem = this.dataSet[index];
+            if (!isNaN(dataItem[attribute])) {
+                var curValue = parseFloat(dataItem[attribute]);
+                var curNormValue = (curValue - curMin) / (curMax - curMin); 
+                var curSqDiff = (curNormValue - normAttrMean) * (curNormValue - normAttrMean);
+                attrVariance += curSqDiff;
+            } else {
+                attrVariance = dataItem[attribute];
+                this.attributeValueMap[attribute]['variance'] = attrVariance;
+                break;
+            }
+        }
+        this.attributeValueMap[attribute]['variance'] = attrVariance / this.dataSet.length;
+    }
+}
 
 
 /*
@@ -387,15 +475,15 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
 /*
 * Increments attribute's weight by increment. Checks to ensure that the weight is always in [0.0,1.0]
 * */
-ial.updateAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
+ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
     var logObj = new LogObj(attribute);
     logObj.setOldWeight(this.attributeWeightVector[attribute]);
-    logObj.setEventName('AttributeWeightChange_UPDATE');
+    logObj.setEventName('AttributeWeightChange_UPDATE'); 
 
-    var newWeight = this.attributeWeightVector[attribute]+increment;
+    var newWeight = this.attributeWeightVector[attribute] + increment;
 
     if(this.useNormalizedAttributeWeights==0) {
         if (newWeight > 1.0) {
@@ -1414,7 +1502,6 @@ function getWeightVectorStackSubset(time) {
 // computes variance for numerical attributes and entropy for categorical attributes
 function computeAttributeVariance(data, attr) {
     data = ial.getArray(data);
-    var mean = 0; 
     var attributeValueMap = ial.getAttributeValueMap();
     if (attributeValueMap[attr].dataType == 'categorical') {
         var distr = computeCategoricalDistribution(data, attr); 
@@ -1427,19 +1514,30 @@ function computeAttributeVariance(data, attr) {
         ent *= -1; 
         return ent; 
     } else if (attributeValueMap[attr].dataType == 'numeric') {
+        var mean = 0; 
+        var min = parseFloat(data[0][attr]);
+        var max = parseFloat(data[0][attr]);
+
+        // find min and max of data
         for (var curDataItem of data) {
             var curValue = parseFloat(curDataItem[attr]);
-            var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
-            curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+            if (curValue < min) min = curValue; 
+            if (curValue > max) max = curValue; 
+        }
+
+        // find mean
+        for (var curDataItem of data) {
+            var curValue = parseFloat(curDataItem[attr]);
+            var curNormValue = (curValue - min) / (max - min);
             mean += curNormValue;
         }
         mean /= data.length;
 
+        // find variance
         var variance = 0; 
         for (var curDataItem of data) {
             var curValue = parseFloat(curDataItem[attr]);
-            var curNormValue = curValue - Number(attributeValueMap[attr]['min']);
-            curNormValue /= Number(attributeValueMap[attr]['max']) - Number(attributeValueMap[attr]['min']);
+            var curNormValue = (curValue - min) / (max - min);
             var curSqDiff = (curNormValue - mean) * (curNormValue - mean); 
             variance += curSqDiff;
         }
