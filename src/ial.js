@@ -248,7 +248,6 @@ ial.setNumeric = function(attributeList) {
         this.attributeValueMap[attribute]['mean'] = curMean; 
 
         var normAttrMean = (curMean - curMin) / (curMax - curMin);
-        console.log("attr, min, max, mean, norm mean: " + attribute + ", " + this.attributeValueMap[attribute]['min'] + ", " + this.attributeValueMap[attribute]['max'] + ", " + this.attributeValueMap[attribute]['mean'] + ", " + normAttrMean);
         var attrVariance = 0;
         for (var index in this.dataSet) {
             var dataItem = this.dataSet[index];
@@ -475,7 +474,7 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
 /*
 * Increments attribute's weight by increment. Checks to ensure that the weight is always in [0.0,1.0]
 * */
-ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
+ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){ 
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
@@ -486,6 +485,7 @@ ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalL
     var newWeight = this.attributeWeightVector[attribute] + increment;
 
     if(this.useNormalizedAttributeWeights==0) {
+        console.log("if");
         if (newWeight > 1.0) {
             this.attributeWeightVector[attribute] = 1.0;
         } else if (newWeight < 0.0) {
@@ -494,6 +494,7 @@ ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalL
             this.attributeWeightVector[attribute] = newWeight;
         }
     }else{
+        this.attributeWeightVector[attribute] = newWeight; 
         ial.normalizeAttributeWeightVector();
     }
     ial.updateActiveAttributeCount();
