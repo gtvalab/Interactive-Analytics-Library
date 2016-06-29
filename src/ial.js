@@ -452,6 +452,7 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
             this.attributeWeightVector[attribute] = newWeight;
         }
     }else{
+        this.attributeWeightVector[attribute] = newWeight; 
         ial.normalizeAttributeWeightVector();
     }
     ial.updateActiveAttributeCount();
@@ -605,7 +606,7 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
 /*
 * Nullifies attributeWeightVector to 0.0s
 * */
-ial.nullifyAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
+ial.nullifyAttributeWeightVector = function (logEvent, additionalLogInfoMap) {
 
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
@@ -633,6 +634,36 @@ ial.nullifyAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     ial.updateItemScores();
 };
 
+/*
+* Nullifies attributeWeightVector to 0.0s
+* */
+ial.nullifyAttributeWeights = function (attributes, logEvent, additionalLogInfoMap) {
+
+    logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
+    additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
+
+    var logObj = new LogObj(clone(this.attributeWeightVector));
+    logObj.setOldWeight(clone(this.attributeWeightVector));
+    logObj.setEventName('AttributeWeightChange_NULLIFY');
+
+    for(var i = 0; i < attributes.length; i++){
+        ial.setAttributeWeight(attributes[i], 0.0);
+    }
+
+    logObj.setNewWeight(clone(this.attributeWeightVector));
+    if(additionalLogInfoMap!={}){
+        logObj.setCustomLogInfo(additionalLogInfoMap);
+    }
+
+    // always track attribute weight changes in attributeWeightVectorStack
+    ial.attributeWeightVectorStackPush(logObj);
+
+    if(logEvent==true){
+        this.sessionLogs.push(logObj);
+    }
+    ial.updateActiveAttributeCount();
+    ial.updateItemScores();
+};
 
 /*
 * Returns top N points based on interaction weight (a.k.a. weight)
