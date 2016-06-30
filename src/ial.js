@@ -31,7 +31,7 @@ ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,co
     this.interactionStack = [];
     this.attributeWeightVectorStack = [];
     this.biasLogs = []; 
-    this.maxStackSize = 500;
+    this.maxStackSize = 500000;
     this.BIAS_ATTRIBUTE_WEIGHT = 'bias_attribute_weight';
     this.BIAS_VARIANCE = 'bias_variance';
     this.BIAS_SUBSET = 'bias_subset';
@@ -356,11 +356,10 @@ ial.setItemWeight = function (d,newWeight,logEvent,additionalLogInfoMap) {
 
     d.ial.weight = newWeight;
 
-    // always track item weight changes in interactionStack
-    ial.interactionStackPush(logObj);
-
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track item weight changes in interactionStack
+        ial.interactionStackPush(logObj);
     }
 };
 
@@ -382,18 +381,17 @@ ial.incrementItemWeight = function (d,increment,logEvent,additionalLogInfoMap) {
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track item weight changes in interactionStack
-    ial.interactionStackPush(logObj);
-
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track item weight changes in interactionStack
+        ial.interactionStackPush(logObj);
     }
     //console.log(logObj)
 };
 
 // returns the current attributeValueMap
 ial.getAttributeValueMap = function(){
-    return clone(this.attributeValueMap);
+    return ial.clone(this.attributeValueMap);
 };
 
 /*
@@ -416,7 +414,7 @@ ial.getNormalizedAttributeValue = function(val,attribute) {
 * returns current attributeWeightVector
 * */
 ial.getAttributeWeightVector = function(){
-    return clone(this.attributeWeightVector);
+    return ial.clone(this.attributeWeightVector);
 };
 
 /*
@@ -461,14 +459,14 @@ ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfo
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
+    logObj.setNewWeight(this.attributeWeightVector[attribute]);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
 
-    logObj.setNewWeight(this.attributeWeightVector[attribute]);
     ial.updateItemScores();
 };
 
@@ -505,14 +503,14 @@ ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalL
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
+    logObj.setNewWeight(this.attributeWeightVector[attribute]);
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
 
-    logObj.setNewWeight(this.attributeWeightVector[attribute]);
     ial.updateItemScores();
 };
 
@@ -523,11 +521,11 @@ ial.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additi
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj(clone(this.attributeWeightVector));
-    logObj.setOldWeight(clone(this.attributeWeightVector));
+    var logObj = new LogObj(ial.clone(this.attributeWeightVector));
+    logObj.setOldWeight(ial.clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_SETALL');
 
-    this.attributeWeightVector = clone(newAttributeWeightVector);
+    this.attributeWeightVector = ial.clone(newAttributeWeightVector);
     for(var attribute in this.attributeWeightVector){
         if(this.attributeWeightVector[attribute]>1.0){
             this.attributeWeightVector[attribute] = 1.0
@@ -537,21 +535,21 @@ ial.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additi
         }
     }
 
-    logObj.setNewWeight(clone(this.attributeWeightVector));
+    logObj.setNewWeight(ial.clone(this.attributeWeightVector));
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
-
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
 
     if(this.useNormalizedAttributeWeights==1){
         ial.normalizeAttributeWeightVector();
     }
+
     ial.updateItemScores();
 };
 
@@ -575,8 +573,8 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj(clone(ial.printAttributeWeightVectorStack));
-    logObj.setOldWeight(clone(this.attributeWeightVector));
+    var logObj = new LogObj(ial.clone(ial.printAttributeWeightVectorStack));
+    logObj.setOldWeight(ial.clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_RESET');
 
     for(var attribute in this.attributeWeightVector){
@@ -588,18 +586,19 @@ ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
+    logObj.setNewWeight(ial.clone(this.attributeWeightVector));
 
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
     ial.updateActiveAttributeCount();
 
     if(this.useNormalizedAttributeWeights==1){
         ial.normalizeAttributeWeightVector();
     }
-    logObj.setNewWeight(clone(this.attributeWeightVector));
+
     ial.updateItemScores();
 };
 
@@ -611,25 +610,25 @@ ial.nullifyAttributeWeightVector = function (logEvent, additionalLogInfoMap) {
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj(clone(this.attributeWeightVector));
-    logObj.setOldWeight(clone(this.attributeWeightVector));
+    var logObj = new LogObj(ial.clone(this.attributeWeightVector));
+    logObj.setOldWeight(ial.clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_NULLIFY');
 
     for(var attribute in this.attributeWeightVector){
         this.attributeWeightVector[attribute] = 0.0;
     }
 
-    logObj.setNewWeight(clone(this.attributeWeightVector));
+    logObj.setNewWeight(ial.clone(this.attributeWeightVector));
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
-
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
+
     ial.updateActiveAttributeCount();
     ial.updateItemScores();
 };
@@ -642,25 +641,25 @@ ial.nullifyAttributeWeights = function (attributes, logEvent, additionalLogInfoM
     logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
     additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-    var logObj = new LogObj(clone(this.attributeWeightVector));
-    logObj.setOldWeight(clone(this.attributeWeightVector));
+    var logObj = new LogObj(ial.clone(this.attributeWeightVector));
+    logObj.setOldWeight(ial.clone(this.attributeWeightVector));
     logObj.setEventName('AttributeWeightChange_NULLIFY');
 
     for(var i = 0; i < attributes.length; i++){
         ial.setAttributeWeight(attributes[i], 0.0);
     }
 
-    logObj.setNewWeight(clone(this.attributeWeightVector));
+    logObj.setNewWeight(ial.clone(this.attributeWeightVector));
     if(additionalLogInfoMap!={}){
         logObj.setCustomLogInfo(additionalLogInfoMap);
     }
 
-    // always track attribute weight changes in attributeWeightVectorStack
-    ial.attributeWeightVectorStackPush(logObj);
-
     if(logEvent==true){
         this.sessionLogs.push(logObj);
+        // track attribute weight changes in attributeWeightVectorStack
+        ial.attributeWeightVectorStackPush(logObj);
     }
+
     ial.updateActiveAttributeCount();
     ial.updateItemScores();
 };
@@ -956,7 +955,7 @@ ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
             }
         }
     }
-    console.log(clone(tempAttributeWeightVector));
+    console.log(ial.clone(tempAttributeWeightVector));
     //console.log(minVariance,maxVariance);
 
     // setting weights as normalized values between 0 -1 based on variances (final step)
@@ -1154,7 +1153,7 @@ ial.generateAttributeWeightVectorUsingDifferences = function (points1, points2) 
                 }
             }
         }
-        //console.log(clone(tempAttributeWeightVector));
+        //console.log(ial.clone(tempAttributeWeightVector));
         //console.log(minVariance,maxVariance);
 
         // setting weights as normalized values between 0 -1 based on variances (final step)
@@ -1364,7 +1363,7 @@ LogObj.prototype.setEventName = function(ev) {
 };
 
 LogObj.prototype.setCustomLogInfo = function(customLogInfoMap) {
-    this.customLogInfo = clone(customLogInfoMap);
+    this.customLogInfo = ial.clone(customLogInfoMap);
 };
 
 
@@ -1387,7 +1386,10 @@ ial.interactionStackPush = function(obj) {
     if (typeof obj === 'undefined' || obj == null) return;
 
     this.interactionStack = ial.getInteractionStack(); 
-    if (this.interactionStack.length >= this.maxStackSize) ial.interactionStackPop(); 
+    if (this.interactionStack.length >= this.maxStackSize) {
+        console.log("Max stack size reached");
+        ial.interactionStackPop(); 
+    }
     this.interactionStack.push(obj); 
 }
 
@@ -1424,7 +1426,7 @@ ial.attributeWeightVectorStackPop = function() {
 // time arg can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
 function getInteractionStackSubset(time, interactionTypes) {
-    this.interactionStack = clone(ial.getInteractionStack());
+    this.interactionStack = ial.clone(ial.getInteractionStack());
     var interactionSubset = [];
 
     if (typeof time === 'undefined') time = this.interactionStack.length;
@@ -1603,7 +1605,7 @@ ial.getArray = function(arrayLike) {
 
 // returns the current stack of bias logs
 ial.getBiasLogs = function() {
-    return clone(this.biasLogs);
+    return ial.clone(this.biasLogs);
 }
 
 // print bias logs to console
@@ -1724,10 +1726,10 @@ ial.computeSubsetBias = function(threshold, time, interactionTypes) {
 //     score doesn't get added to aggregate score unless it surpasses indThreshold
 //   else: score = 1
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerSpan, interactionTypes) {
+ial.computeRepetitionBias = function(indThreshold, violationThreshold, time, considerSpan, interactionTypes) {
     if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 0.025 * this.dataSet.length;
     if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
-    if (typeof percIntThreshold === 'undefined' || isNaN(parseFloat(percIntThreshold))) percIntThreshold = 0.025;
+    if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 1) violationThreshold = 0.025; 
     if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
     var interactionSubset = getInteractionStackSubsetByEventType(time, interactionTypes); 
     var origInteractionSubset = getInteractionStackSubset(time, interactionTypes);
@@ -1736,7 +1738,7 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     var curDate = new Date(); 
     currentLog['bias_type'] = this.BIAS_REPETITION;
     currentLog['current_time'] = new Date();
-    currentLog['threshold'] = {'individual_threshold' : indThreshold, 'percent_interaction_threshold' : percIntThreshold};
+    currentLog['threshold'] = {'individual_threshold' : indThreshold, 'violation_threshold' : violationThreshold};
     var currentLogInfo = {}; 
     currentLogInfo['interaction_types'] = interactionTypes;
     currentLogInfo['consider_span'] = considerSpan; 
@@ -1818,11 +1820,11 @@ ial.computeRepetitionBias = function(indThreshold, aggThreshold, time, considerS
     currentLogInfo['percentage'] = numViolations / intTypeCounter; 
     currentLog['info'] = currentLogInfo;
 
-    if (percIntThreshold >= 1) {
-        if (numViolations > percIntThreshold) currentLog['result'] = true; 
+    if (violationThreshold >= 1) {
+        if (numViolations > violationThreshold) currentLog['result'] = true; 
         else currentLog['result'] = false; 
     } else {
-        if ((numViolations / intTypeCounter) > percIntThreshold) currentLog['result'] = true; 
+        if ((numViolations / intTypeCounter) > violationThreshold) currentLog['result'] = true; 
         else currentLog['result'] = false; 
     }
 
@@ -2014,7 +2016,7 @@ ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, score
 * ---------------------
 * */
 
-function clone(obj) {
+ial.clone = function(obj) {
     // Handle the 3 simple types, and null or undefined
     if (null == obj || "object" != typeof obj) return obj;
 
@@ -2029,7 +2031,7 @@ function clone(obj) {
     if (obj instanceof Array) {
         var copy = [];
         for (var i = 0, len = obj.length; i < len; i++) {
-            copy[i] = clone(obj[i]);
+            copy[i] = ial.clone(obj[i]);
         }
         return copy;
     }
@@ -2038,7 +2040,7 @@ function clone(obj) {
     if (obj instanceof Object) {
         var copy = {};
         for (var attr in obj) {
-            if (obj.hasOwnProperty(attr)) copy[attr] = clone(obj[attr]);
+            if (obj.hasOwnProperty(attr)) copy[attr] = ial.clone(obj[attr]);
         }
         return copy;
     }
