@@ -20,7 +20,7 @@
         }
 
         this.attrVector = {};
-        this.dataSet = passedData;
+        this.dataSet = clone(passedData);
         this.clusters = [];
         this.attributeWeightVector = {}; // map of attributes to weights in range [0,1]
         this.ialIdToDataMap  = {}; // map from ialId to actual data item
