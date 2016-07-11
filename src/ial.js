@@ -415,6 +415,23 @@
         }
     };
 
+
+    ial.addData = function (dataPoints) {
+        for(var dataPoint of dataPoints){
+            var newId = this.dataSet[this.dataSet.length-1].ial.id;
+            while(newId in this.ialIdToDataMap){
+                newId += 1;
+            }
+
+            dataPoint['ial'] = {};
+            dataPoint['ial']['id'] = newId;
+            dataPoint['ial']['weight'] = 1;
+            dataPoint['ial']['itemScore'] = getItemScore(dataPoint,this.attributeWeightVector);
+
+            this.ialIdToDataMap[newId] = dataPoint;
+        }
+    };
+
     /*
      * returns normalized value in [0,1] given an attribute's current value and name
      * ref: http://stackoverflow.com/questions/5294955/how-to-scale-down-a-range-of-numbers-with-a-known-min-and-max-value
