@@ -20,7 +20,7 @@
         }
 
         this.attrVector = {};
-        this.dataSet = clone(passedData);
+        this.dataSet = passedData;
         this.clusters = [];
         this.attributeWeightVector = {}; // map of attributes to weights in range [0,1]
         this.ialIdToDataMap  = {}; // map from ialId to actual data item
@@ -391,7 +391,7 @@
 
 // returns the current attributeValueMap
     ial.getAttributeValueMap = function(){
-        return ial.clone(this.attributeValueMap);
+        return ial.utils.clone(this.attributeValueMap);
     };
 
     /*
@@ -415,10 +415,9 @@
         }
     };
 
-
     ial.addData = function (dataPoints) {
         for(var dataPoint of dataPoints){
-            var newId = this.dataSet[this.dataSet.length-1].ial.id;
+            var newId = parseInt(this.dataSet[this.dataSet.length-1].ial.id);
             while(newId in this.ialIdToDataMap){
                 newId += 1;
             }
@@ -426,9 +425,10 @@
             dataPoint['ial'] = {};
             dataPoint['ial']['id'] = newId;
             dataPoint['ial']['weight'] = 1;
-            dataPoint['ial']['itemScore'] = getItemScore(dataPoint,this.attributeWeightVector);
+            dataPoint['ial']['itemScore'] = parseFloat(getItemScore(dataPoint,this.attributeWeightVector));
 
             this.ialIdToDataMap[newId] = dataPoint;
+            this.dataSet.push(dataPoint);
         }
     };
 
@@ -452,7 +452,7 @@
      * returns current attributeWeightVector
      * */
     ial.getAttributeWeightVector = function(){
-        return ial.clone(this.attributeWeightVector);
+        return ial.utils.clone(this.attributeWeightVector);
     };
 
     /*
@@ -559,11 +559,11 @@
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
+        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_SETALL');
 
-        this.attributeWeightVector = ial.clone(newAttributeWeightVector);
+        this.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
         for(var attribute in this.attributeWeightVector){
             if(this.attributeWeightVector[attribute]>1.0){
                 this.attributeWeightVector[attribute] = 1.0
@@ -573,7 +573,7 @@
             }
         }
 
-        logObj.setNewWeight(ial.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
@@ -611,8 +611,8 @@
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.clone(ial.printAttributeWeightVectorStack));
-        logObj.setOldWeight(ial.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(ial.printAttributeWeightVectorStack));
+        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_RESET');
 
         for(var attribute in this.attributeWeightVector){
@@ -624,7 +624,7 @@
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
-        logObj.setNewWeight(ial.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
@@ -648,15 +648,15 @@
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
+        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_NULLIFY');
 
         for(var attribute in this.attributeWeightVector){
             this.attributeWeightVector[attribute] = 0.0;
         }
 
-        logObj.setNewWeight(ial.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
@@ -679,15 +679,15 @@
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
+        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_NULLIFY');
 
         for(var i = 0; i < attributes.length; i++){
             ial.setAttributeWeight(attributes[i], 0.0);
         }
 
-        logObj.setNewWeight(ial.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
@@ -993,7 +993,7 @@
                 }
             }
         }
-        console.log(ial.clone(tempAttributeWeightVector));
+        console.log(ial.utils.clone(tempAttributeWeightVector));
         //console.log(minVariance,maxVariance);
 
         // setting weights as normalized values between 0 -1 based on variances (final step)
@@ -1191,7 +1191,7 @@
                     }
                 }
             }
-            //console.log(ial.clone(tempAttributeWeightVector));
+            //console.log(ial.utils.clone(tempAttributeWeightVector));
             //console.log(minVariance,maxVariance);
 
             // setting weights as normalized values between 0 -1 based on variances (final step)
@@ -1401,7 +1401,7 @@
     };
 
     LogObj.prototype.setCustomLogInfo = function(customLogInfoMap) {
-        this.customLogInfo = ial.clone(customLogInfoMap);
+        this.customLogInfo = ial.utils.clone(customLogInfoMap);
     };
 
 
@@ -1464,7 +1464,7 @@
 // time arg can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
     function getInteractionStackSubset(time, interactionTypes) {
-        this.interactionStack = ial.clone(ial.getInteractionStack());
+        this.interactionStack = ial.utils.clone(ial.getInteractionStack());
         var interactionSubset = [];
 
         if (typeof time === 'undefined') time = this.interactionStack.length;
@@ -1643,7 +1643,7 @@
 
 // returns the current stack of bias logs
     ial.getBiasLogs = function() {
-        return ial.clone(this.biasLogs);
+        return ial.utils.clone(this.biasLogs);
     }
 
 // print bias logs to console
@@ -2054,7 +2054,8 @@
      * ---------------------
      * */
 
-    ial.clone = function(obj) {
+    ial.utils = {}
+    ial.utils.clone = function(obj) {
         // Handle the 3 simple types, and null or undefined
         if (null == obj || "object" != typeof obj) return obj;
 
@@ -2069,7 +2070,7 @@
         if (obj instanceof Array) {
             var copy = [];
             for (var i = 0, len = obj.length; i < len; i++) {
-                copy[i] = ial.clone(obj[i]);
+                copy[i] = ial.utils.clone(obj[i]);
             }
             return copy;
         }
@@ -2078,7 +2079,7 @@
         if (obj instanceof Object) {
             var copy = {};
             for (var attr in obj) {
-                if (obj.hasOwnProperty(attr)) copy[attr] = ial.clone(obj[attr]);
+                if (obj.hasOwnProperty(attr)) copy[attr] = ial.utils.clone(obj[attr]);
             }
             return copy;
         }
