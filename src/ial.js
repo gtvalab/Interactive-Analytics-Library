@@ -395,6 +395,27 @@
     };
 
     /*
+    * Function to delete an item from all computations.
+    * Given a dataItem object, removes the corresponding item from both the this.dataSet (list) and the this.ialIdToDataMap (hashmap)
+    * */
+    ial.deleteItem = function (dataItem) {
+        var idToDelete = dataItem.ial.id;
+        var indexToDelete = -1;
+        for(var i in this.dataSet){
+            var d = this.dataSet[i];
+            var curId = d.ial.id;
+            if(idToDelete==curId){
+                indexToDelete=i;
+                break;
+            }
+        }
+        if(indexToDelete!=-1){
+            this.dataSet.splice(indexToDelete,1);
+            delete this.ialIdToDataMap[idToDelete];
+        }
+    };
+
+    /*
      * returns normalized value in [0,1] given an attribute's current value and name
      * ref: http://stackoverflow.com/questions/5294955/how-to-scale-down-a-range-of-numbers-with-a-known-min-and-max-value
      * */
