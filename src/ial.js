@@ -455,6 +455,10 @@
         return ial.utils.clone(this.attributeWeightVector);
     };
 
+    ial.getIalIdToDataMap = function () {
+        return this.ialIdToDataMap;
+    };
+
     /*
      * returns requested attribute's weight
      * */
