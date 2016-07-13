@@ -31,7 +31,7 @@
         this.interactionStack = [];
         this.attributeWeightVectorStack = [];
         this.biasLogs = [];
-        this.maxStackSize = 500000;
+        this.maxStackSize = 10000;
         this.BIAS_ATTRIBUTE_WEIGHT = 'bias_attribute_weight';
         this.BIAS_VARIANCE = 'bias_variance';
         this.BIAS_SUBSET = 'bias_subset';
@@ -1413,6 +1413,10 @@
     /*
      * Interaction and attribute weight vector stack utilities
      * */
+
+    ial.setMaxStackSize = function(newStackSize) {
+        this.maxStackSize = newStackSize; 
+    }
 
     ial.getInteractionStack = function() {
         return this.interactionStack;
