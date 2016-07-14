@@ -156,20 +156,16 @@
             }
         }
 
-        // find normalized variance
+        // find variance
         for (var attribute in this.attributeValueMap) {
             if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
                 var attrMean = parseFloat(this.attributeValueMap[attribute]['mean']);
-                var curMin = parseFloat(this.attributeValueMap[attribute]['min']);
-                var curMax = parseFloat(this.attributeValueMap[attribute]['max']);
-                var normAttrMean = (attrMean - curMin) / (curMax - curMin);
                 var attrVariance = 0;
                 for (var index in passedData) {
                     var dataItem = passedData[index];
                     if (!isNaN(dataItem[attribute])) {
                         var curValue = parseFloat(dataItem[attribute]);
-                        var curNormValue = (curValue - curMin) / (curMax - curMin);
-                        var curSqDiff = (curNormValue - normAttrMean) * (curNormValue - normAttrMean);
+                        var curSqDiff = (curValue - attrMean) * (curValue - attrMean);
                         attrVariance += curSqDiff;
                     } else {
                         attrVariance = dataItem[attribute];
@@ -1579,8 +1575,8 @@
     }
 
 // private
-// uses normalized attribute values
 // computes variance for numerical attributes and entropy for categorical attributes
+// entropy ref: http://www.cs.rochester.edu/u/james/CSC248/Lec6.pdf
     function computeAttributeVariance(data, attr) {
         data = getArray(data);
         var attributeValueMap = ial.getAttributeValueMap();
@@ -1596,21 +1592,11 @@
             return ent;
         } else if (attributeValueMap[attr].dataType == 'numeric') {
             var mean = 0;
-            var min = parseFloat(data[0][attr]);
-            var max = parseFloat(data[0][attr]);
-
-            // find min and max of data
-            for (var curDataItem of data) {
-                var curValue = parseFloat(curDataItem[attr]);
-                if (curValue < min) min = curValue;
-                if (curValue > max) max = curValue;
-            }
 
             // find mean
             for (var curDataItem of data) {
                 var curValue = parseFloat(curDataItem[attr]);
-                var curNormValue = (curValue - min) / (max - min);
-                mean += curNormValue;
+                mean += curValue;
             }
             mean /= data.length;
 
@@ -1618,8 +1604,7 @@
             var variance = 0;
             for (var curDataItem of data) {
                 var curValue = parseFloat(curDataItem[attr]);
-                var curNormValue = (curValue - min) / (max - min);
-                var curSqDiff = (curNormValue - mean) * (curNormValue - mean);
+                var curSqDiff = (curValue - mean) * (curValue - mean);
                 variance += curSqDiff;
             }
             variance /= data.length;
@@ -1774,8 +1759,8 @@
 //   else: score = 1
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
     ial.computeRepetitionBias = function(indThreshold, violationThreshold, time, considerSpan, interactionTypes) {
-        if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 0.025 * this.dataSet.length;
-        if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
+        if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold < 1) indThreshold = 0.025 * this.dataSet.length;
+        if (indThreshold < 1) indThreshold = 1; // must be at least 1
         if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 0) violationThreshold = 0.025;
         if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
         var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
