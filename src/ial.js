@@ -36,6 +36,8 @@
         this.BIAS_VARIANCE = 'bias_variance';
         this.BIAS_SUBSET = 'bias_subset';
         this.BIAS_REPETITION = 'bias_repetition';
+        // TODO: update this if more metrics are added
+        this.BIAS_TYPES = [this.BIAS_ATTRIBUTE_WEIGHT, this.BIAS_VARIANCE, this.BIAS_SUBSET, this.BIAS_REPETITION]; 
         this.ATTRIBUTE_SCORES = ['span', 'average', 'max'];
 
         // initializing attributeWeightVector and attributeValueMap
@@ -1431,7 +1433,6 @@
     ial.interactionEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        this.interactionQueue = ial.getInteractionQueue();
         if (this.interactionQueue.length >= this.maxQueueSize) {
             console.log("Max queue size reached");
             ial.interactionDequeue();
@@ -1440,7 +1441,6 @@
     }
 
     ial.interactionDequeue = function() {
-        this.interactionQueue = ial.getInteractionQueue();
         return this.interactionQueue.shift(); 
     }
 
@@ -1457,16 +1457,14 @@
     ial.attributeWeightVectorEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        this.attributeWeightVectorQueue = ial.getAttributeWeightVectorQueue();
         if (this.attributeWeightVectorQueue.length >= this.maxQueueSize) {
-        	console.log("Max queue size reached"); 
-        	ial.attributeWeightVectorDequeue();
+            console.log("Max queue size reached"); 
+            ial.attributeWeightVectorDequeue();
         }
         this.attributeWeightVectorQueue.push(obj);
     }
 
     ial.attributeWeightVectorDequeue = function() {
-        this.attributeWeightVectorQueue = ial.getInteractionQueue();
         return this.attributeWeightVectorQueue.shift(); 
     }
 
@@ -1511,8 +1509,8 @@
 // 'time' can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
     function getInteractionQueueSubsetByEventType(time, interactionTypes) {
-        this.interactionQueue = ial.getInteractionQueue();
-        interactionSubsetQueues = {};
+        var interactionSubsetQueues = {};
+        this.interactionQueue = ial.getInteractionQueue(); 
 
         if (typeof time === 'undefined') time = this.interactionQueue.length;
 
@@ -1560,7 +1558,7 @@
 // arg can be an integer; returns the last 'time' interactions
     function getWeightVectorQueueSubset(time) {
         this.attributeWeightVectorQueue = ial.getAttributeWeightVectorQueue();
-        weightVectorSubset = ial.getAttributeWeightVectorQueue();
+        var weightVectorSubset = ial.getAttributeWeightVectorQueue();
 
         if (typeof time !== 'undefined') {
             if (time instanceof Date) {
@@ -1584,7 +1582,7 @@
 // uses normalized attribute values
 // computes variance for numerical attributes and entropy for categorical attributes
     function computeAttributeVariance(data, attr) {
-        data = ial.getArray(data);
+        data = getArray(data);
         var attributeValueMap = ial.getAttributeValueMap();
         if (attributeValueMap[attr].dataType == 'categorical') {
             var distr = computeCategoricalDistribution(data, attr);
@@ -1633,7 +1631,7 @@
 // private
 // computes distribution of categorical attribute values
     function computeCategoricalDistribution(data, attr) {
-        data = ial.getArray(data);
+        data = getArray(data);
         var attributeValueMap = ial.getAttributeValueMap();
         var distribution = {};
 
@@ -1647,7 +1645,7 @@
     }
 
 // make sure you're dealing with an array
-    ial.getArray = function(arrayLike) {
+    function getArray(arrayLike) {
         let arr = Array.from(arrayLike);
         return arr;
     }
@@ -1699,17 +1697,17 @@
             else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time, interactionTypes);
             else return ial.computeVarianceBias(threshold1, threshold2, time, interactionTypes);
         } else {
-            var numMetrics = 4; // TODO: update this if more metrics are added
-            var biasResult = {};
+            var numMetrics = this.BIAS_TYPES.length;
+            var biasResultMap = {};
             var attributeWeightBias = ial.computeAttributeWeightBias(threshold1, threshold2, individualScore, time);
             var repetitionBias = ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan, interactionTypes);
             var subsetBias = ial.computeSubsetBias(threshold1, time, interactionTypes);
             var varianceBias = ial.computeVarianceBias(threshold1, threshold2, threshold3, time, interactionTypes);
 
-            biasResult['attribute_weight_metric'] = attributeWeightBias;
-            biasResult['repetition_metric'] = repetitionBias;
-            biasResult['subset_metric'] = subsetBias;
-            biasResult['variance_metric'] = varianceBias;
+            biasResultMap['attribute_weight_metric'] = attributeWeightBias;
+            biasResultMap['repetition_metric'] = repetitionBias;
+            biasResultMap['subset_metric'] = subsetBias;
+            biasResultMap['variance_metric'] = varianceBias;
 
             var numBiases = 0;
             if (attributeWeightBias['result']) numBiases++;
@@ -1717,10 +1715,10 @@
             if (subsetBias['result']) numBiases++;
             if (varianceBias['result']) numBiases++;
 
-            if ((numBiases / numMetrics) > totalThreshold) biasResult['result'] = true;
-            else biasResult['result'] = false;
+            if ((numBiases / numMetrics) > totalThreshold) biasResultMap['result'] = true;
+            else biasResultMap['result'] = false;
 
-            return biasResult;
+            return biasResultMap;
         }
     }
 
