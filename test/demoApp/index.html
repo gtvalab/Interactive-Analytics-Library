@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="js/lib/d3.min.js" type="text/javascript"></script>
+    <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+    <script src="js/lib/d3.tip.js" type="text/javascript"></script>
+    <script src="js/lib/d3.slider.js" type="text/javascript"></script>
+    <script src="js/lib/nv.d3.min.js" type="text/javascript"></script>
+    <!--<script type="text/javascript" src="../ial.js"></script>-->
+    <script type="text/javascript" src="../../src/ial.js"></script>
+    <script type="text/javascript" src="js/pca.js"></script>
+    <script type="text/javascript" src="js/lib/debugout.js"></script>
+    <script type="text/javascript" src="js/lib/jquery-2.1.4.min.js"></script>
+    <script type="text/javascript" src="js/lib/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="js/lib/bootstrap.min.js"></script>
+    <script type="text/javascript" src="js/lib/bootstrap-select.min.js"></script>
+    <link rel="stylesheet" href="css/vendor/jquery-ui.min.css">
+    <link rel="stylesheet" href="css/vendor/bootstrap.min.css">
+    <link rel="stylesheet" href="css/vendor/bootstrap-select.min.css">
+    <link rel="stylesheet" href="css/vendor/d3.slider.css" media="screen">
+    <link rel="stylesheet" href="css/vendor/nv.d3.min.css" media="screen">
+    <style>
+
+        .topNPoint{
+            cursor: pointer;
+        }
+
+        .similarPoint{
+            cursor: pointer;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+
+        .dot {
+            stroke: #000;
+            stroke-width: 0.5;
+        }
+
+        .d3-tip {
+            line-height: 1;
+            font-weight: bold;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 2px;
+        }
+
+        /* Creates a small triangle extender for the tooltip */
+        .d3-tip:after {
+            box-sizing: border-box;
+            display: inline;
+            font-size: 10px;
+            width: 100%;
+            line-height: 1;
+            color: rgba(0, 0, 0, 0.8);
+            content: "\25BC";
+            position: absolute;
+            text-align: center;
+        }
+
+        /* Style northward tooltips differently */
+        .d3-tip.n:after {
+            margin: -1px 0 0 0;
+            top: 100%;
+            left: 0;
+        }
+        .panel-heading p:after {
+            font-family: 'Glyphicons Halflings';
+            content: "\e114";
+            float: right;
+            color: grey;
+        }
+        .panel-heading p.collapsed:after {
+            content: "\e080";
+        }
+
+        .infobar {
+            fill: steelblue;
+            height:100%;
+        }
+        .infolabel{
+            font-size: 12px;
+            width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-left: 3px;
+        }
+        .infovalue{
+            font-size: 10px;
+            margin-left: 2px;
+            margin-top: 3px;
+        }
+        .inforow {
+            display: flex;
+            justify-content: start;
+            align-content: center;
+            height: 18px;
+        }
+
+        .distributionbar {
+            /*background-color: gray;*/
+            fill:green;
+            height:100%;
+        }
+        .distributionlabel{
+            font-size: 12px;
+            width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-left: 0px;
+        }
+        .distributionvalue{
+            font-size: 10px;
+            margin-left: 2px;
+            margin-top: 3px;
+        }
+        .distributionrow {
+            display: flex;
+            justify-content: start;
+            align-content: center;
+            height: 18px;
+        }
+
+
+
+
+    </style>
+</head>
+<body style="background-color:#F8F8F8;">
+    <div id="mainContent" class="col-sm-8">
+        <ul style="float:right" class="nav nav-pills">
+            <li class="active" id="showAnalysisView"><a href="#">Analysis</a></li>
+            <li id="showProvenanceView"><a href="#">Provenance</a></li>
+        </ul>
+        <div id="vis"></div>
+        <div style="margin-top: 50px;" id="provenanceView" class="hide">
+            <div id="provenanceVisDiv"></div>
+        </div>
+        <a id="downloadlink" style="display:none"></a>
+    </div>
+    <div id="sidepanel" class="col-sm-4" style="background-color:gray;overflow: auto;">
+        <div align="right" style="margin-top: 5px;">
+            <button class="btn btn-info" id="downloadLogsButton"><span class="glyphicon glyphicon-download-alt"></span></button>
+        </div>
+        <br>
+        <div class="panel-group" id="accordion">
+            <div class="panel panel-default" id="detailspanel">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapsedetailspanel"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Details</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapsedetailspanel" class="panel-collapse collapse">
+                    <div class="panel-body" id="detailspanelcontent">
+
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel1">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseOne"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Attribute Weights</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseOne" class="panel-collapse collapse">
+                    <div id="collapseOneBody" class="panel-body">
+                        <div align="right">
+                            <button title="Update attribute weights" id="updateAttributeWeightBarsButton" class="btn btn-default"><span class="glyphicon glyphicon-indent-left"></span></button>
+                            <button title="Cancel updates" id="cancelAttributeWeightUpdates" class="btn btn-default"><span class="glyphicon glyphicon-align-justify"></span></button>
+                            <button title="Nullify attribute weights" id="nullifyAttributeWeightsButton" class="btn btn-default"><span class="glyphicon glyphicon-trash"></span></button>
+                            <button title="Reset attribute weights" id="resetAttributeWeightsButton" class="btn btn-default"><span class="glyphicon glyphicon-refresh"></span></button>
+                        </div>
+                        <div id="attributeWeightDiv"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel6">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseSix"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Cars of interest</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseSix" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <div style="padding-bottom: 5px;" id="interestPointsDiv">
+                            <!--<select data-live-search="true" class="selectpicker" id="attributeGeneratingFocusPoint1" data-width="300px"></select>-->
+                            <!--<select data-live-search="true" class="selectpicker" id="attributeGeneratingFocusPoint2" data-width="300px"></select>-->
+                            <!--<select data-live-search="true" class="selectpicker" id="attributeGeneratingFocusPoint3" data-width="300px"></select>-->
+                        </div>
+                        <hr>
+                        <!--<form>-->
+                        <button class="btn-default" id="generateAndApplyWeightVectorButton">Update weight vector</button> using :
+                        <input type="radio" id="useSimilaritiesForWeightVectorComputation" name="calcMode" value="sim" checked> Similarity
+                        <input type="radio" id="useDifferencesForWeightVectorComputation" name="calcMode" value="diff"> Differences
+                        <!--</form>-->
+                        <!--<button class="btn-default" id="generateWeightVectorButton">Get weight vector</button>-->
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel5">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseFive"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Get similar cars</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseFive" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <div style="padding-bottom: 5px;">
+                            <!--<select data-live-search="true" class="selectpicker" id="similarPointsFocusPoint" data-width="300px"></select>-->
+                            Selected Car: <b><span id="similarPointsFocusPoint"></span></b>
+                        </div>
+                        <select data-live-search="true" class="selectpicker" id="NSimilarPointsValue" data-width="80px"></select>
+                        <button id="getSimilarPoints" class="btn btn-primary">Get points</button>
+                        <div id="similarPointsDiv"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel4">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseFour"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Top N cars</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseFour" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <label for="topNValue">Top :&nbsp;</label><select data-live-search="true" class="selectpicker" id="topNValue" data-width="80px"></select>
+                        <button id="topNButton_ByWeight" class="btn btn-primary">Get points By Interaction Weights</button>
+                        <button id="topNButton_ByScore" class="btn btn-primary">Get points By Item Scores</button>
+                        <div id="topNDiv"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel3">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseThree"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Analytical Models</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseThree" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <label>KNN</label>
+                        <br/>
+                        <button class="btn btn-primary" id="createClusterButton">Create clusters</button>
+                        <button class="btn btn-default" id="groupClustersButton">Group clusters</button>
+                        <button class="btn btn-default" id="colorByClusterButton">Color by clusters</button>
+                    </div>
+                    <div class="panel-body">
+                        <label>PCA (2-axis)</label>
+                        <br/>
+                        <button class="btn btn-primary" id="drawPCAButton">Apply PCA</button>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel2">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseTwo"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Interaction Weights</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseTwo" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <label for="clickslider">Click: </label>
+                        <div id="clickslider"></div>
+                        <hr>
+                        <label for="dblclickslider">Double click: </label>
+                        <div id="dblclickslider"></div>
+                        <hr>
+                        <label for="hoverslider">Hover: </label>
+                        <div id="hoverslider"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel panel-default" id="panel8">
+                <div class="panel-heading">
+                    <h4 class="panel-title" align="center">
+                        <p data-toggle="collapse" data-target="#collapseEight"
+                           class="collapsed" style="cursor: pointer;">
+                            <b>Bias</b>
+                        </p>
+                    </h4>
+                </div>
+                <div id="collapseEight" class="panel-collapse collapse">
+                    <div class="panel-body">
+                        <button id="computeSubsetBias" class="btn btn-primary" style="float: left;">Compute Subset Metric</button>
+                        <button id="computeVarianceBias" class="btn btn-primary" style="float: right;">Compute Variance Metric</button>
+                        <br>
+                        <button id="computeRepetitionBias" class="btn btn-primary" style="float: left;">Compute Repetition Metric</button>
+                        <button id="computeAttributeWeightBias" class="btn btn-primary" style="float: right;">Compute Attribute Weight Metric</button>
+                        <br>
+                        <button id="computeAllBias" class="btn btn-primary" style="float: center;">Compute All Metrics</button>
+                        <br>
+                        <p>
+                            Filename: <input type="text" id="downloadBiasFileName">
+                            <button id="downloadBiasLogs" class="btn btn-primary" style="float: center;">Download Bias Logs</button>
+                        </p>
+                        <div id="biasResultsDiv"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<script type="text/javascript" src="js/main.js"></script>
+<script type="text/javascript">
+    $("#mainContent").height($(window).height() * 0.9);
+    $("#sidepanel").height($(window).height());
+    var params = {'width':$("#mainContent").width(),'height':$("#mainContent").height()};
+    $("#vis").width(params.width);
+    $("#vis").height(params.height);
+    main.init(params);
+</script>
+</html>
