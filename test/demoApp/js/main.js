@@ -75,33 +75,6 @@
                 .html(function(d) {
                     return "<span style='color:gold'>" + d.Name+ "</span><br>";
                 });
- 
-            var datasubset = []; 
-            var foundcorolla = false;
-            var foundcivic = false; 
-            var foundxa = false; 
-            var foundsentra = false; 
-            console.log("attribute value map", ial.getAttributeValueMap());
-            for (var i = 0; i < data.length; i++) {
-                var curName = data[i]["Name"];
-                if (curName.indexOf("Civic") > 0 && !foundcivic) {
-                    foundcivic = true; 
-                    datasubset.push(data[i]);
-                }
-                if (curName.indexOf("xA") > 0 && !foundxa) {
-                    foundxa = true; 
-                    datasubset.push(data[i]);
-                }
-                if (curName.indexOf("Corolla") > 0 && !foundcorolla) {
-                    foundcorolla = true; 
-                    datasubset.push(data[i]);
-                }
-                if (curName.indexOf("Sentra") > 0 && !foundsentra) {
-                    foundsentra = true; 
-                    datasubset.push(data[i]);
-                }
-            }
-
 
             main.initializeVis(params.width, params.height);
         });

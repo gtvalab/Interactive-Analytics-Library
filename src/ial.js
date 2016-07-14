@@ -1592,7 +1592,7 @@
                 var curVal = distr[attrVal];
                 ent += ((curVal / curSum) * Math.log2(curVal / curSum));
             }
-            ent *= -1;
+            if (ent != 0) ent *= -1;
             return ent;
         } else if (attributeValueMap[attr].dataType == 'numeric') {
             var mean = 0;
@@ -1726,7 +1726,7 @@
 // threshold (optional) can be a percentage 0-1 (defaults to 0.25) or a whole number
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
     ial.computeSubsetBias = function(threshold, time, interactionTypes) {
-        if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.25;
+        if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold)) || threshold < 0 || threshold > this.dataSet.length) threshold = 0.25;
 
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
@@ -1766,7 +1766,7 @@
 
 // bias is defined as repeating the same interaction on the same data
 // indThreshold (optional) is percentage or number of interactions allowed with same data item before it is considered bias (defaults to 0.025 * size of data)
-// percIntThreshold (optional) is percentage or number of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
+// violationThreshold (optional) is percentage or number of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
 // considerSpan = true lowers contributing score of repetitions to account for how spread out they were
 // interactions are weighted: 
 //   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
@@ -1776,7 +1776,7 @@
     ial.computeRepetitionBias = function(indThreshold, violationThreshold, time, considerSpan, interactionTypes) {
         if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold))) indThreshold = 0.025 * this.dataSet.length;
         if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
-        if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 1) violationThreshold = 0.025;
+        if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 0) violationThreshold = 0.025;
         if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
         var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
         var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
@@ -1885,11 +1885,11 @@
 // percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
     ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThreshold, time, interactionTypes) {
+    	var attributeValueMap = ial.getAttributeValueMap();
         if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.5;
         if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.5;
-        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
+        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
-        var attributeValueMap = ial.getAttributeValueMap();
 
         var currentLog = {};
         var curDate = new Date();
@@ -1950,11 +1950,11 @@
 // percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 // scoreType (optional) metric for when individual attribute weight change is in violation (span, average, or max)
     ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, scoreType, time) {
+    	var attributeValueMap = ial.getAttributeValueMap();
         if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold > 1 || indThreshold < 0) indThreshold = 0.1;
-        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
+        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0];
         var weightVectorSubset = getWeightVectorQueueSubset(time);
-        var attributeValueMap = ial.getAttributeValueMap();
 
         var currentLog = {};
         var curDate = new Date();
