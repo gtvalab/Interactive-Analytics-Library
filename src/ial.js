@@ -28,10 +28,10 @@
         this.activeAttributeCount = 0;
         this.sessionLogs = [];
 
-        this.interactionStack = [];
-        this.attributeWeightVectorStack = [];
+        this.interactionQueue = [];
+        this.attributeWeightVectorQueue = [];
         this.biasLogs = [];
-        this.maxStackSize = 10000;
+        this.maxQueueSize = 10000;
         this.BIAS_ATTRIBUTE_WEIGHT = 'bias_attribute_weight';
         this.BIAS_VARIANCE = 'bias_variance';
         this.BIAS_SUBSET = 'bias_subset';
@@ -358,8 +358,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track item weight changes in interactionStack
-            ial.interactionStackPush(logObj);
+            // track item weight changes in interactionQueue
+            ial.interactionEnqueue(logObj);
         }
     };
 
@@ -383,8 +383,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track item weight changes in interactionStack
-            ial.interactionStackPush(logObj);
+            // track item weight changes in interactionQueue
+            ial.interactionEnqueue(logObj);
         }
         //console.log(logObj)
     };
@@ -505,8 +505,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
 
         ial.updateItemScores();
@@ -549,8 +549,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
 
         ial.updateItemScores();
@@ -584,8 +584,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
 
         if(this.useNormalizedAttributeWeights==1){
@@ -615,7 +615,7 @@
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.utils.clone(ial.printAttributeWeightVectorStack));
+        var logObj = new LogObj(ial.utils.clone(ial.printAttributeWeightVectorQueue));
         logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_RESET');
 
@@ -632,8 +632,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
         ial.updateActiveAttributeCount();
 
@@ -667,8 +667,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
 
         ial.updateActiveAttributeCount();
@@ -698,8 +698,8 @@
 
         if(logEvent==true){
             this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorStack
-            ial.attributeWeightVectorStackPush(logObj);
+            // track attribute weight changes in attributeWeightVectorQueue
+            ial.attributeWeightVectorEnqueue(logObj);
         }
 
         ial.updateActiveAttributeCount();
@@ -1411,92 +1411,95 @@
 
 
     /*
-     * Interaction and attribute weight vector stack utilities
+     * Interaction and attribute weight vector queue utilities
      * */
 
-    ial.setMaxStackSize = function(newStackSize) {
-        this.maxStackSize = newStackSize; 
+    ial.setMaxQueueSize = function(newQueueSize) {
+        this.maxQueueSize = newQueueSize; 
     }
 
-    ial.getInteractionStack = function() {
-        return this.interactionStack;
+    ial.getInteractionQueue = function() {
+        return this.interactionQueue;
     }
 
-// print the contents of the interaction stack
-    ial.printInteractionStack = function() {
-        console.log("Printing Interaction Stack (" + this.interactionStack.length + "): ");
-        for (var i in this.interactionStack) console.log(this.interactionStack[i]);
+// print the contents of the interaction queue
+    ial.printInteractionQueue = function() {
+        console.log("Printing Interaction Queue (" + this.interactionQueue.length + "): ");
+        for (var i in this.interactionQueue) console.log(this.interactionQueue[i]);
     }
 
-    ial.interactionStackPush = function(obj) {
+    ial.interactionEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        this.interactionStack = ial.getInteractionStack();
-        if (this.interactionStack.length >= this.maxStackSize) {
-            console.log("Max stack size reached");
-            ial.interactionStackPop();
+        this.interactionQueue = ial.getInteractionQueue();
+        if (this.interactionQueue.length >= this.maxQueueSize) {
+            console.log("Max queue size reached");
+            ial.interactionDequeue();
         }
-        this.interactionStack.push(obj);
+        this.interactionQueue.push(obj);
     }
 
-    ial.interactionStackPop = function() {
-        this.interactionStack = ial.getInteractionStack();
-        return this.interactionStack.pop();
+    ial.interactionDequeue = function() {
+        this.interactionQueue = ial.getInteractionQueue();
+        return this.interactionQueue.shift(); 
     }
 
-    ial.getAttributeWeightVectorStack = function() {
-        return this.attributeWeightVectorStack;
+    ial.getAttributeWeightVectorQueue = function() {
+        return this.attributeWeightVectorQueue;
     }
 
-// print the contents of the interaction stack
-    ial.printAttributeWeightVectorStack = function() {
-        console.log("Printing Attribute Weight Vector Stack (" + this.attributeWeightVectorStack.length + "): ");
-        for (var i in this.attributeWeightVectorStack) console.log(this.attributeWeightVectorStack[i]);
+// print the contents of the interaction queue
+    ial.printAttributeWeightVectorQueue = function() {
+        console.log("Printing Attribute Weight Vector Queue (" + this.attributeWeightVectorQueue.length + "): ");
+        for (var i in this.attributeWeightVectorQueue) console.log(this.attributeWeightVectorQueue[i]);
     }
 
-    ial.attributeWeightVectorStackPush = function(obj) {
+    ial.attributeWeightVectorEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        this.attributeWeightVectorStack = ial.getAttributeWeightVectorStack();
-        if (this.attributeWeightVectorStack.length >= this.maxStackSize) ial.attributeWeightVectorStackPop();
-        this.attributeWeightVectorStack.push(obj);
+        this.attributeWeightVectorQueue = ial.getAttributeWeightVectorQueue();
+        if (this.attributeWeightVectorQueue.length >= this.maxQueueSize) {
+        	console.log("Max queue size reached"); 
+        	ial.attributeWeightVectorDequeue();
+        }
+        this.attributeWeightVectorQueue.push(obj);
     }
 
-    ial.attributeWeightVectorStackPop = function() {
-        this.attributeWeightVectorStack = ial.getInteractionStack();
-        return this.attributeWeightVectorStack.pop();
+    ial.attributeWeightVectorDequeue = function() {
+        this.attributeWeightVectorQueue = ial.getInteractionQueue();
+        return this.attributeWeightVectorQueue.shift(); 
     }
 
 // private
 // time arg can be a Date object; returns all interactions that occurred since 'time'
 // time arg can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
-    function getInteractionStackSubset(time, interactionTypes) {
-        this.interactionStack = ial.utils.clone(ial.getInteractionStack());
+    function getInteractionQueueSubset(time, interactionTypes) {
+        this.interactionQueue = ial.utils.clone(ial.getInteractionQueue());
         var interactionSubset = [];
 
-        if (typeof time === 'undefined') time = this.interactionStack.length;
+        if (typeof time === 'undefined') time = this.interactionQueue.length;
 
         if (time instanceof Date) {
-            for (var i = 0; i < this.interactionStack.length; i++) {
-                var curLog = this.interactionStack[i];
+            for (var i = 0; i < this.interactionQueue.length; i++) {
+                var curLog = this.interactionQueue[i];
                 var curTime = curLog.eventTimeStamp;
                 var curEventType = curLog['customLogInfo']['eventType'];
                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1))
-                    interactionSubset.push(this.interactionStack[i]);
+                    interactionSubset.push(this.interactionQueue[i]);
             }
         } else if (!isNaN(parseInt(time))) {
-            if (time > this.interactionStack.length) time = this.interactionStack.length;
+            if (time > this.interactionQueue.length) time = this.interactionQueue.length;
             var numLogs = 0;
-            var i = 0;
-            while (i < this.interactionStack.length && numLogs <= time) {
-                var curLog = this.interactionStack[i];
+            var i = this.interactionQueue.length - 1;
+            while (i >= 0 && numLogs <= time) {
+                var curLog = this.interactionQueue[i];
                 var curEventType = curLog['customLogInfo']['eventType'];
                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
                     interactionSubset.push(curLog);
                     numLogs++;
                 }
-                i++;
+                i--;
             }
         }
 
@@ -1507,70 +1510,70 @@
 // 'time' can be a Date object; returns all interactions that occurred since 'time'
 // 'time' can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
-    function getInteractionStackSubsetByEventType(time, interactionTypes) {
-        this.interactionStack = ial.getInteractionStack();
-        interactionSubsetStacks = {};
+    function getInteractionQueueSubsetByEventType(time, interactionTypes) {
+        this.interactionQueue = ial.getInteractionQueue();
+        interactionSubsetQueues = {};
 
-        if (typeof time === 'undefined') time = this.interactionStack.length;
+        if (typeof time === 'undefined') time = this.interactionQueue.length;
 
         if (time instanceof Date) {
-            interactionSubsetStacks = {};
-            for (var i = 0; i < this.interactionStack.length; i++) {
-                var curLog = this.interactionStack[i];
+            interactionSubsetQueues = {};
+            for (var i = 0; i < this.interactionQueue.length; i++) {
+                var curLog = this.interactionQueue[i];
                 var curTime = curLog.eventTimeStamp;
                 var curEventType = curLog.customLogInfo.eventType;
                 if (curEventType === 'undefined') curEventType = 'uncategorized';
                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
-                    var curStack = [];
-                    if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType];
+                    var curQueue = [];
+                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
 
-                    curStack.push(curLog);
-                    interactionSubsetStacks[curEventType] = curStack;
+                    curQueue.push(curLog);
+                    interactionSubsetQueues[curEventType] = curQueue;
                 }
             }
         } else if (!isNaN(parseInt(time))) {
-            interactionSubsetStacks = {};
-            if (time > this.interactionStack.length) time = this.interactionStack.length;
+            interactionSubsetQueues = {};
+            if (time > this.interactionQueue.length) time = this.interactionQueue.length;
             var i = 0;
             var numLogs = 0;
-            while (i < this.interactionStack.length && numLogs <= time) {
-                var curLog = this.interactionStack[i];
+            while (i < this.interactionQueue.length && numLogs <= time) {
+                var curLog = this.interactionQueue[i];
                 var curEventType = curLog.customLogInfo.eventType;
                 if (curEventType === 'undefined') curEventType = 'uncategorized';
                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
-                    var curStack = [];
-                    if (interactionSubsetStacks.hasOwnProperty(curEventType)) curStack = interactionSubsetStacks[curEventType];
+                    var curQueue = [];
+                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
 
-                    curStack.push(curLog);
-                    interactionSubsetStacks[curEventType] = curStack;
+                    curQueue.push(curLog);
+                    interactionSubsetQueues[curEventType] = curQueue;
                     numLogs++;
                 }
                 i++;
             }
         }
 
-        return interactionSubsetStacks;
+        return interactionSubsetQueues;
     }
 
 // private
 // arg can be a Date object; returns all interactions that occurred since 'time'
 // arg can be an integer; returns the last 'time' interactions
-    function getWeightVectorStackSubset(time) {
-        this.attributeWeightVectorStack = ial.getAttributeWeightVectorStack();
-        weightVectorSubset = ial.getAttributeWeightVectorStack();
+    function getWeightVectorQueueSubset(time) {
+        this.attributeWeightVectorQueue = ial.getAttributeWeightVectorQueue();
+        weightVectorSubset = ial.getAttributeWeightVectorQueue();
 
         if (typeof time !== 'undefined') {
             if (time instanceof Date) {
                 weightVectorSubset = [];
-                for (var i = 0; i < this.attributeWeightVectorStack.length; i++) {
-                    var curTime = this.attributeWeightVectorStack[i].eventTimeStamp;
-                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(this.attributeWeightVectorStack[i]);
+                for (var i = 0; i < this.attributeWeightVectorQueue.length; i++) {
+                    var curTime = this.attributeWeightVectorQueue[i].eventTimeStamp;
+                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(this.attributeWeightVectorQueue[i]);
                 }
             } else if (!isNaN(parseInt(time))) {
                 weightVectorSubset = [];
-                if (time > this.attributeWeightVectorStack.length) time = this.attributeWeightVectorStack.length;
+                if (time > this.attributeWeightVectorQueue.length) time = this.attributeWeightVectorQueue.length;
                 for (var i = 0; i < time; i++)
-                    weightVectorSubset.push(this.attributeWeightVectorStack[i]);
+                    weightVectorSubset.push(this.attributeWeightVectorQueue[i]);
             }
         }
 
@@ -1649,7 +1652,7 @@
         return arr;
     }
 
-// returns the current stack of bias logs
+// returns the current queue of bias logs
     ial.getBiasLogs = function() {
         return ial.utils.clone(this.biasLogs);
     }
@@ -1662,17 +1665,17 @@
         // print attribute information
         console.log("attributes", this.getAttributeValueMap());
 
-        // iterate through stack
+        // iterate through queue
         console.log("# bias logs: " + this.biasLogs.length);
         for (var i = 0; i < this.biasLogs.length; i++) console.log("bias log", this.biasLogs[i]);
 
         // print individual interaction records
-        console.log("# interaction logs: " + this.interactionStack.length);
-        for (var i = 0; i < this.interactionStack.length; i++) console.log("interaction log", this.interactionStack[i]);
+        console.log("# interaction logs: " + this.interactionQueue.length);
+        for (var i = 0; i < this.interactionQueue.length; i++) console.log("interaction log", this.interactionQueue[i]);
 
         // print attribute weight change records
-        console.log("# attribute weight logs: " + this.attributeWeightVectorStack.length);
-        for (var i = 0; i < this.attributeWeightVectorStack.length; i++) console.log("attribute weight log", this.attributeWeightVectorStack[i]);
+        console.log("# attribute weight logs: " + this.attributeWeightVectorQueue.length);
+        for (var i = 0; i < this.attributeWeightVectorQueue.length; i++) console.log("attribute weight log", this.attributeWeightVectorQueue[i]);
     }
 
 
@@ -1684,7 +1687,7 @@
 // totalThreshold (optional) percent of metrics that can return true before it is considered bias (defaults to 0.5)
 // metric (optional) which bias metric to compute (defaults to compute all metrics)
 // threshold1, threshold2, and threshold3 (optional) how high or low a metric can be before it is considered bias (default varies according to which metric is used)
-// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full stack) 
+// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full queue) 
 // interactionTypes (optional) can specify to only compute bias on a particular types of interaction (based on eventType key in customLogInfo)
 // returns true if bias is detected, false otherwise
     ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2, considerSpan, individualScore, threshold3, interactionTypes) {
@@ -1727,7 +1730,7 @@
     ial.computeSubsetBias = function(threshold, time, interactionTypes) {
         if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold))) threshold = 0.25;
 
-        var interactionSubset = getInteractionStackSubset(time, interactionTypes);
+        var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
         currentLog['bias_type'] = this.BIAS_SUBSET;
@@ -1777,8 +1780,8 @@
         if (indThreshold < 1) indThreshold = indThreshold * this.dataSet.length;
         if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 1) violationThreshold = 0.025;
         if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
-        var interactionSubset = getInteractionStackSubsetByEventType(time, interactionTypes);
-        var origInteractionSubset = getInteractionStackSubset(time, interactionTypes);
+        var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
+        var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
         var curDate = new Date();
@@ -1793,10 +1796,10 @@
         var numLogsCounter = 0;
         var intTypeCounter = 0;
         for (var eventTypeKey in interactionSubset) {
-            var curStack = interactionSubset[eventTypeKey];
-            for (var i = 0; i < curStack.length; i++) {
+            var curQueue = interactionSubset[eventTypeKey];
+            for (var i = 0; i < curQueue.length; i++) {
                 numLogsCounter++;
-                var curId = curStack[i].dataItem.ial.id;
+                var curId = curQueue[i].dataItem.ial.id;
                 if (repetitionMap.hasOwnProperty(eventTypeKey)) {
                     var curObj = repetitionMap[eventTypeKey];
                     if (curObj.hasOwnProperty(curId)) repetitionMap[eventTypeKey][curId]++;
@@ -1814,8 +1817,8 @@
 
         var numViolations = 0;
         for (var eventTypeKey in repetitionMap) {
-            var curStack = repetitionMap[eventTypeKey];
-            for (var curId in curStack) {
+            var curQueue = repetitionMap[eventTypeKey];
+            for (var curId in curQueue) {
                 var curKey = eventTypeKey + "," + curId;
                 if (repetitionMap[eventTypeKey][curId] > indThreshold) {
                     if (considerSpan) {
@@ -1887,7 +1890,7 @@
         if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.5;
         if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.5;
         if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
-        var interactionSubset = getInteractionStackSubset(time, interactionTypes);
+        var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
         var attributeValueMap = ial.getAttributeValueMap();
 
         var currentLog = {};
@@ -1952,7 +1955,7 @@
         if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold > 1 || indThreshold < 0) indThreshold = 0.1;
         if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold))) percAttrThreshold = 0.5;
         if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0];
-        var weightVectorSubset = getWeightVectorStackSubset(time);
+        var weightVectorSubset = getWeightVectorQueueSubset(time);
         var attributeValueMap = ial.getAttributeValueMap();
 
         var currentLog = {};
