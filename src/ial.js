@@ -1866,13 +1866,13 @@
 
 // bias is defined as the variance between the data that has been examined
 // indNumThreshold (optional) indicates the maximum percentage change in variance that is tolerated for numerical attributes (defaults to 0.5)
-// indCatThreshold (optional) indicates the maximum percentage change in entropy allowed for the distribution of categorical attributes (defaults to 0.5)
+// indCatThreshold (optional) indicates the p-value below which the chi-squared test would reject the hypothesis that the data items interacted with and the actual distribution are the same for categorical attributes (defaults to 0.1)
 // percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
     ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThreshold, time, interactionTypes) {
-    	var attributeValueMap = ial.getAttributeValueMap();
+        var attributeValueMap = ial.getAttributeValueMap();
         if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.5;
-        if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.5;
+        if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.1;
         if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
@@ -1891,28 +1891,86 @@
         var numAttributes = 0;
         var numViolations = 0;
         var varianceVector = {};
-        var changeVector = {};
         for (var attr in attributeValueMap) {
+            varianceVector[attr] = {};
             if (attributeValueMap[attr].dataType == 'numeric') {
                 numAttributes++;
                 var curVariance = Number(computeAttributeVariance(dataSubset, attr));
                 var curChange = Math.abs((curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance']));
                 if (curChange > indNumThreshold) numViolations++;
-                varianceVector[attr] = curVariance;
-                changeVector[attr] = curChange;
+                varianceVector[attr]["variance"] = curVariance;
+                varianceVector[attr]["percent_change"] = curChange;
             } else if (attributeValueMap[attr].dataType == 'categorical') {
                 numAttributes++;
-                // variance for categorical attributes returns entropy
-                var curVariance = Number(computeAttributeVariance(dataSubset, attr));
-                var curChange = Math.abs((curVariance - Number(attributeValueMap[attr]['variance'])) / Number(attributeValueMap[attr]['variance']));
-                if (curChange > indCatThreshold) numViolations++;
-                varianceVector[attr] = curVariance;
-                changeVector[attr] = curChange;
+                // variance for categorical attributes returns chi-squared test
+                var distr = computeCategoricalDistribution(dataSubset, attr);
+                var fullDistr = attributeValueMap[attr]["distribution"];
+                var chiSq = 0; 
+                for (attrVal in fullDistr) {
+                    var expVal = dataSubset.length * (parseFloat(fullDistr[attrVal]) / this.dataSet.length);
+                    var obsVal = 0; 
+                    if (distr.hasOwnProperty(attrVal)) obsVal = parseFloat(distr[attrVal]);
+                    chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
+                }
+                var degFree = Object.keys(fullDistr).length - 1;
+
+                var gamma = function(x, df) {
+                    var gammaResult;
+                    if (x <= 0) {
+                        gammaResult = 0;
+                    } else if (x < df + 1) {
+                        var t1 = 1 / df;
+                        var prob = t1;
+                        var count = 1;
+                        while (t1 > prob * .00001) {
+                            t1 = t1 * x / (df + count);
+                            prob = prob + t1;
+                            count = count + 1;
+                        }
+                        prob = prob * Math.exp(df * Math.log(x) - x - logGamma(df));
+                        return prob;
+                    } else {
+                        var a0 = 0;
+                        var b0 = 1;
+                        var a1 = 1;
+                        var b1 = x;
+                        var aOld = 0;
+                        var count = 0;
+                        while (Math.abs((a1 - aOld) / a1) > .00001) {
+                            aOld = a1;
+                            count = count + 1;
+                            a0 = a1 + (count - df) * a0;
+                            b0 = b1 + (count - df) * b0;
+                            a1 = x * a0 + count * a1;
+                            b1 = x * b0 + count * b1;
+                            a0 = a0 / b1;
+                            b0 = b0 / b1;
+                            a1 = a1 / b1;
+                            b1 = 1;
+                        }
+                        var prob = 1.0 - (Math.exp(df * Math.log(x) - x - logGamma(df)) * a1);
+                        return prob;
+                    }
+
+                    return gammaResult;
+                }
+
+                var logGamma = function(x) {
+                    var curVal = 1 + 76.18009173 / x - 86.50532033 / (x + 1) + 24.01409822 / (x + 2) - 1.231739516 / (x + 3) + .00120858003 / (x + 4) - .00000536382 / (x + 5);
+                    var logRes = (x - .5) * Math.log(x + 4.5) - (x + 4.5) + Math.log(curVal * 2.50662827465);
+                    return logRes;
+                }
+
+                result = gamma(chiSq / 2, degFree / 2);
+                result = 1.0 - (Math.round(result * 100000) / 100000);
+                varianceVector[attr]["degrees_of_freedom"] = degFree; 
+                varianceVector[attr]["chi_squared"] = chiSq;
+                varianceVector[attr]["p_value"] = result; 
+                if (result < indCatThreshold) numViolations++;
             }
         }
 
         currentLogInfo['variance_vector'] = varianceVector;
-        currentLogInfo['change_vector'] = changeVector;
         currentLogInfo['num_violations'] = numViolations;
         currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
         currentLogInfo['percentage'] = numViolations / numAttributes;
@@ -1935,7 +1993,7 @@
 // percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
 // scoreType (optional) metric for when individual attribute weight change is in violation (span, average, or max)
     ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, scoreType, time) {
-    	var attributeValueMap = ial.getAttributeValueMap();
+        var attributeValueMap = ial.getAttributeValueMap();
         if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold > 1 || indThreshold < 0) indThreshold = 0.1;
         if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0];
