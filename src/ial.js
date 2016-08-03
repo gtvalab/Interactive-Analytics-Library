@@ -263,6 +263,14 @@
         }
     }
 
+    ial.getAttributeVectorSum = function () {
+        var weightSum = 0.0;
+        for(var attribute in this.attributeWeightVector){
+            weightSum += parseFloat(this.attributeWeightVector[attribute]);
+        }
+        return weightSum;
+    };
+
 
     /*
      * computes item score
