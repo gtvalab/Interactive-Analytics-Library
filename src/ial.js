@@ -1036,7 +1036,8 @@
      * Returns an attribute weight vector generated based on difference between given points
      * */
     ial.generateAttributeWeightVectorUsingDifferences = function (points1, points2) {
-        if (typeof points2 !== 'undefined') {
+        var tempAttributeWeightVector = {};
+        if (typeof points2 !== 'undefined' && points2.length>0) {
             var points1Avg = {}, points2Avg = {};
             var points1Len = points1.length, points2Len = points2.length;
             var points1CatMap = {}, points2CatMap = {};
@@ -1149,6 +1150,7 @@
             tempAttributeWeightVector = difference;
 
         } else {
+            /*
             // returns result directly since goal is to find similarity
             var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
                 var a = 0.0, b = 1.0;
@@ -1215,6 +1217,10 @@
             if(this.useNormalizedAttributeWeights==1){
                 tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
             }
+            */
+
+            tempAttributeWeightVector = ial.generateAttributeWeightVectorUsingSimilarity(points1);
+
 
             //---------------------------
             // old difference based logic
