@@ -1718,7 +1718,7 @@
             avgLevel += parseFloat(varianceBias['metric_level']);
             avgLevel += parseFloat(screenTimeBias['metric_level']);
             avgLevel /= numMetrics;
-            biasResultMap['average_metric_level'] = avgLevel;
+            biasResultMap['metric_level'] = avgLevel;
 
             return biasResultMap;
         }
@@ -1879,7 +1879,7 @@
                 var fValue = curVariance / fullVariance;
                 var dfFull = this.dataSet.length - 1; 
                 var dfSub = dataSubset.length - 1; 
-                var prob = getFPercent(fValue, dfSub, dFull);
+                var prob = getFPercent(fValue, dfSub, dfFull);
                 avgProb += prob;
 
                 varianceVector[attr]["type"] = "numeric";
@@ -1900,7 +1900,7 @@
                     chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
                 }
                 var degFree = Object.keys(fullDistr).length - 1;
-                var prob = getChiSquarePercent(chiSq, df);
+                var prob = getChiSquarePercent(chiSq, degFree);
                 avgProb += prob;
                 
                 varianceVector[attr]["type"] = "categorical";

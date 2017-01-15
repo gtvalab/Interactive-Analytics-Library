@@ -702,31 +702,49 @@
     $("#computeSubsetBias").click(function(ev){
         var biasResult = ial.computeSubsetBias(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Subset Metric:</b> " + biasResult['result']);
+        $("#biasResultsDiv").append("<b>Subset Metric:</b> " + biasResult['metric_level']);
+        console.log("Subset Bias Metric Result");
+        console.log(biasResult);
     });
 
     $("#computeVarianceBias").click(function(ev){
         var biasResult = ial.computeVarianceBias(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Variance Metric:</b> " + biasResult['result']);
+        $("#biasResultsDiv").append("<b>Variance Metric:</b> " + biasResult['metric_level']);
+        console.log("Variance Bias Metric Result");
+        console.log(biasResult);
     });
 
     $("#computeRepetitionBias").click(function(ev){
         var biasResult = ial.computeRepetitionBias(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Repetition Metric:</b> " + biasResult['result']);
+        $("#biasResultsDiv").append("<b>Repetition Metric:</b> " + biasResult['metric_level']);
+        console.log("Repetition Bias Metric Result");
+        console.log(biasResult);
     });
 
     $("#computeAttributeWeightBias").click(function(ev){
         var biasResult = ial.computeAttributeWeightBias(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Attribute Weight Metric:</b> " + biasResult['result']);
+        $("#biasResultsDiv").append("<b>Attribute Weight Metric:</b> " + biasResult['metric_level']);
+        console.log("Attribute Weight Bias Metric Result");
+        console.log(biasResult);
+    });
+    
+    $("#computeScreenTimeBias").click(function(ev){
+        var biasResult = ial.computeScreenTimeBias(); 
+        $("#biasResultsDiv").html("");
+        $("#biasResultsDiv").append("<b>Screen Time Metric:</b> " + biasResult['metric_level']);
+        console.log("Screen Time Bias Metric Result");
+        console.log(biasResult);
     });
 
     $("#computeAllBias").click(function(ev){
         var biasResult = ial.computeBias(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>All Metrics:</b> " + biasResult['result']);
+        $("#biasResultsDiv").append("<b>All Metrics:</b> " + biasResult['metric_level']);
+        console.log("All Bias Metric Results");
+        console.log(biasResult);
     });
 
     $("#downloadBiasLogs").click(function(ev){
