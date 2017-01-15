@@ -2048,6 +2048,15 @@
          currentLog['number_of_logs'] = this.dataSet.length;
          var currentLogInfo = {};
          
+         // TODO: We aren't currently tracking screen time -- for now, return an empty log
+         currentLog['info'] = currentLogInfo; 
+         currentLog['metric_level'] = 0;
+         return currentLog;
+         
+         
+         
+   
+         
     	 // compute average screen time
     	 var avgTime = 0;
     	 for (var index in this.dataSet) 
