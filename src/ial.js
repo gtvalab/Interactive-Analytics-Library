@@ -1886,7 +1886,7 @@
                 varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
                 varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
                 varianceVector[attr]["f_value"] = fValue;
-                varianceVector[attr]["metric_level"] = prob; 
+                varianceVector[attr]["metric_level"] = prob; // TODO: should this be prob or 1 - prob? 
 
             } else if (attributeValueMap[attr].dataType == 'categorical') {
                 // variance for categorical attributes returns chi-squared test
@@ -1906,7 +1906,7 @@
                 varianceVector[attr]["type"] = "categorical";
                 varianceVector[attr]["degrees_of_freedom"] = degFree; 
                 varianceVector[attr]["chi_squared"] = chiSq;
-                varianceVector[attr]["metric_level"] = prob; 
+                varianceVector[attr]["metric_level"] = prob; // TODO: should this be prob or 1 - prob? 
             }
         }
         avgProb /= Object.keys(attributeValueMap).length;
@@ -1957,7 +1957,7 @@
                     changeVector[curKey]['new'] = lastVector[curKey];
                     changeVector[curKey]['change'] = curChange;
                     if (curChange > 1) curChange = 1; // set maximum change to be 1
-                    changeVector[curKey]['metric_level'] = curChange;
+                    changeVector[curKey]['metric_level'] = 1.0 - curChange;
                 }
             }
         } else if (scoreType == 'min') {
@@ -1975,7 +1975,7 @@
                         	changeVector[curKey]['new'] = newVector[curKey];
                         	changeVector[curKey]['change'] = curChange;
                         	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = curChange;
+                        	changeVector[curKey]['metric_level'] = 1.0 - curChange;
                     	} 
                     } 
                 }
@@ -1995,7 +1995,7 @@
                         	changeVector[curKey]['new'] = newVector[curKey];
                         	changeVector[curKey]['change'] = curChange;
                         	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = curChange;
+                        	changeVector[curKey]['metric_level'] = 1.0 - curChange;
                     	} 
                     } 
                 }
@@ -2013,12 +2013,12 @@
                         if (changeVector.hasOwnProperty(curKey)) {
                         	changeVector[curKey]['change'] += (mult * curChange);
                         	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] += (mult * curChange);
+                        	changeVector[curKey]['metric_level'] += (1.0 - (mult * curChange));
                         } else {
                         	changeVector[curKey] = {};
                         	changeVector[curKey]['change'] = (mult * curChange);
                         	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = (mult * curChange);
+                        	changeVector[curKey]['metric_level'] = (1.0 - (mult * curChange));
                         }
                     }
                 }
@@ -2030,6 +2030,7 @@
         	avgLevel += changeVector[curKey]['metric_level'];
         avgLevel /= Object.keys(attributeValueMap).length;
 
+        currentLogInfo['change_vector'] = changeVector; 
         currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
         currentLog['info'] = currentLogInfo;
         // metric level in this case represents the average metric level across all attributes
