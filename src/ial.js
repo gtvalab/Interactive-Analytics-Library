@@ -36,9 +36,10 @@
         this.BIAS_VARIANCE = 'bias_variance';
         this.BIAS_SUBSET = 'bias_subset';
         this.BIAS_REPETITION = 'bias_repetition';
+        this.BIAS_SCREEN_TIME = 'bias_screen_time';
         // TODO: update this if more metrics are added
-        this.BIAS_TYPES = [this.BIAS_ATTRIBUTE_WEIGHT, this.BIAS_VARIANCE, this.BIAS_SUBSET, this.BIAS_REPETITION]; 
-        this.ATTRIBUTE_SCORES = ['span', 'average', 'max'];
+        this.BIAS_TYPES = [this.BIAS_ATTRIBUTE_WEIGHT, this.BIAS_VARIANCE, this.BIAS_SUBSET, this.BIAS_REPETITION, this.BIAS_SCREEN_TIME]; 
+        this.ATTRIBUTE_SCORES = ['span', 'average', 'min', 'max'];
 
         // initializing attributeWeightVector and attributeValueMap
         var attributeList = Object.keys(passedData[0]);
@@ -66,6 +67,7 @@
                         this.dataSet[index]["ial"] = {};
                         this.dataSet[index]["ial"]["id"] = index;
                         this.dataSet[index]["ial"]["weight"] = 1;
+                        this.dataSet[index]["ial"]["screen_time"] = 0;
                         this.ialIdToDataMap[index] = this.dataSet[index];
 
                         if (isNaN(this.dataSet[index][attribute])) {
@@ -1680,58 +1682,58 @@
      * Bias metrics
      * */
 
-// totalThreshold (optional) percent of metrics that can return true before it is considered bias (defaults to 0.5)
+// compute bias metrics
 // metric (optional) which bias metric to compute (defaults to compute all metrics)
-// threshold1, threshold2, and threshold3 (optional) how high or low a metric can be before it is considered bias (default varies according to which metric is used)
 // time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full queue) 
-// interactionTypes (optional) can specify to only compute bias on a particular types of interaction (based on eventType key in customLogInfo)
+// interactionTypes (optional) can specify to only compute bias on particular types of interaction (based on eventType key in customLogInfo)
+// considerSpan (optional) considers distance between repeated interactions for repetition metric (defaults to true)
+// scoreType (optional) defines parameter for attribute weight metric (defaults to span)
 // returns true if bias is detected, false otherwise
-    ial.computeBias = function(totalThreshold, metric, threshold1, time, threshold2, considerSpan, individualScore, threshold3, interactionTypes) {
-        if (typeof totalThreshold === 'undefined' || isNaN(parseFloat(totalThreshold))) totalThreshold = 0.5;
-
+    ial.computeBias = function(totalThreshold = 0.5, metric, time, interactionTypes, considerSpan, scoreType) {
         if (typeof metric !== 'undefined') {
-            if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(threshold1, threshold2, individualScore, time);
-            else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan, interactionTypes);
-            else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(threshold1, time, interactionTypes);
-            else return ial.computeVarianceBias(threshold1, threshold2, time, interactionTypes);
+            if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(time, scoreType);
+            else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(time, interactionTypes, considerSpan);
+            else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(time, interactionTypes);
+            else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
+            else return ial.computeVarianceBias(time, interactionTypes);
         } else {
             var numMetrics = this.BIAS_TYPES.length;
             var biasResultMap = {};
-            var attributeWeightBias = ial.computeAttributeWeightBias(threshold1, threshold2, individualScore, time);
-            var repetitionBias = ial.computeRepetitionBias(threshold1, threshold2, time, considerSpan, interactionTypes);
-            var subsetBias = ial.computeSubsetBias(threshold1, time, interactionTypes);
-            var varianceBias = ial.computeVarianceBias(threshold1, threshold2, threshold3, time, interactionTypes);
-
+            var attributeWeightBias = ial.computeAttributeWeightBias(time, scoreType);
+            var repetitionBias = ial.computeRepetitionBias(time, interactionTypes, considerSpan);
+            var subsetBias = ial.computeSubsetBias(time, interactionTypes);
+            var varianceBias = ial.computeVarianceBias(time, interactionTypes);
+            var screenTimeBias = ial.computeScreenTimeBias();
+            
             biasResultMap['attribute_weight_metric'] = attributeWeightBias;
             biasResultMap['repetition_metric'] = repetitionBias;
             biasResultMap['subset_metric'] = subsetBias;
             biasResultMap['variance_metric'] = varianceBias;
+            biasResultMap['screen_time_metric'] = screenTimeBias;
 
-            var numBiases = 0;
-            if (attributeWeightBias['result']) numBiases++;
-            if (repetitionBias['result']) numBiases++;
-            if (subsetBias['result']) numBiases++;
-            if (varianceBias['result']) numBiases++;
-
-            if ((numBiases / numMetrics) > totalThreshold) biasResultMap['result'] = true;
-            else biasResultMap['result'] = false;
+            var avgLevel = 0;
+            avgLevel += parseFloat(attributeWeightBias['metric_level']);
+            avgLevel += parseFloat(repetitionBias['metric_level']);
+            avgLevel += parseFloat(subsetBias['metric_level']);
+            avgLevel += parseFloat(varianceBias['metric_level']);
+            avgLevel += parseFloat(screenTimeBias['metric_level']);
+            avgLevel /= numMetrics;
+            biasResultMap['average_metric_level'] = avgLevel;
 
             return biasResultMap;
         }
     }
 
-// bias is defined as the percentage of the subset of data that has been interacted with that is unique
-// threshold (optional) can be a percentage 0-1 (defaults to 0.25) or a whole number
+// the subset bias metric relates to the percentage of interactions that were with unique data items
+// metric = 1 - (# unique data items interacted with) / (max # interactions) 
+// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeSubsetBias = function(threshold, time, interactionTypes) {
-        if (typeof threshold === 'undefined' || isNaN(parseFloat(threshold)) || threshold < 0 || threshold > this.dataSet.length) threshold = 0.25;
-
+    ial.computeSubsetBias = function(time, interactionTypes) {
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
         currentLog['bias_type'] = this.BIAS_SUBSET;
         currentLog['current_time'] = new Date();
-        currentLog['threshold'] = threshold;
         currentLog['number_of_logs'] = interactionSubset.length;
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
@@ -1749,32 +1751,23 @@
         currentLogInfo['unique_data'] = idSet.size;
         currentLogInfo['percentage'] = percentUnique;
         currentLog['info'] = currentLogInfo;
-
-        if (threshold >= 1) {
-            if (idSet.size < threshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        } else {
-            if (percentUnique < threshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        }
+        
+        // lower percent of unique interactions -> higher level of bias
+        currentLog['metric_level'] = 1.0 - percentUnique; 
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
 
-// bias is defined as repeating the same interaction on the same data
-// indThreshold (optional) is percentage or number of interactions allowed with same data item before it is considered bias (defaults to 0.025 * size of data)
-// violationThreshold (optional) is percentage or number of types of interactions that can exceed indThreshold before it is considered bias (default is 0.025)
-// considerSpan = true lowers contributing score of repetitions to account for how spread out they were
-// interactions are weighted: 
-//   if considerSpan: score = number of repeated interactions / difference in indices of first and last occurrence 
-//     score doesn't get added to aggregate score unless it surpasses indThreshold
-//   else: score = 1
+// the repetition metric relates to the number of times a particular data item has been interacted with
+// metric(t, n) = (# of interactions of type t with d_n) / (total number of interactions)
+// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeRepetitionBias = function(indThreshold, violationThreshold, time, considerSpan, interactionTypes) {
-        if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold < 1) indThreshold = 0.025 * this.dataSet.length;
-        if (indThreshold < 1) indThreshold = 1; // must be at least 1
-        if (typeof violationThreshold === 'undefined' || isNaN(parseFloat(violationThreshold)) || violationThreshold < 0) violationThreshold = 0.025;
+// considerSpan = true lowers contributing score of repetitions by scaling according to how spread out the interactions are
+//   interactions are weighted: 
+//     if considerSpan: score = (number of repeated interactions / total number of interactions) * (1 / difference in indices of first and last occurrence)
+//     else: number of repeated interactions / total number of interactions
+    ial.computeRepetitionBias = function(time, interactionTypes, considerSpan) {
         if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
         var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
         var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
@@ -1783,11 +1776,11 @@
         var curDate = new Date();
         currentLog['bias_type'] = this.BIAS_REPETITION;
         currentLog['current_time'] = new Date();
-        currentLog['threshold'] = {'individual_threshold' : indThreshold, 'violation_threshold' : violationThreshold};
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
         currentLogInfo['consider_span'] = considerSpan;
 
+        // create a map to track # of occurrences of each (interaction, data item) tuple
         var repetitionMap = {};
         var numLogsCounter = 0;
         var intTypeCounter = 0;
@@ -1811,89 +1804,63 @@
         }
         currentLog['number_of_logs'] = numLogsCounter;
 
-        var numViolations = 0;
+        var avgLevel = 0; 
+        var numScores = 0; 
         for (var eventTypeKey in repetitionMap) {
             var curQueue = repetitionMap[eventTypeKey];
             for (var curId in curQueue) {
                 var curKey = eventTypeKey + "," + curId;
-                if (repetitionMap[eventTypeKey][curId] > indThreshold) {
-                    if (considerSpan) {
+                var score = repetitionMap[eventTypeKey][curId] / numLogsCounter;
+                if (considerSpan) {
 
-                        // find indices of when eventTypeKey occurred with data item curId
-                        var occurrenceIndices = [];
-                        for (var j = 0; j < origInteractionSubset.length; j++) {
-                            var curObj = origInteractionSubset[j];
-                            if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
-                                occurrenceIndices.push(j);
-                                if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
-                            }
-                        }
+                	// find indices of when eventTypeKey occurred with data item curId
+                	var occurrenceIndices = [];
+                	for (var j = 0; j < origInteractionSubset.length; j++) {
+                		var curObj = origInteractionSubset[j];
+                		if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
+                			occurrenceIndices.push(j);
+                			if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
+                		}
+                	}
 
-                        var curSpan = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
-                        var bestSpan = curSpan;
-                        var bestWindowSize = occurrenceIndices.length;
-                        var bestScore = bestWindowSize / curSpan;
-
-                        // find best window size (number of repeated interactions to consider) - must be greater than indThreshold
-                        for (var windowSize = indThreshold + 1; windowSize <= occurrenceIndices.length; windowSize++) {
-                            for (var j = 0; j < occurrenceIndices.length; j++) {
-                                for (var k = j + windowSize - 1; k < occurrenceIndices.length; k++) {
-                                    curSpan = Math.abs(occurrenceIndices[k] - occurrenceIndices[j]) + 1;
-                                    var curScore = windowSize / curSpan;
-                                    if (curScore > bestScore) {
-                                        bestScore = curScore;
-                                        bestSpan = curSpan;
-                                    }
-                                }
-                            }
-                        }
-
-                        numViolations += bestScore;
-                        currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'window_size' : bestWindowSize, 'span_used' : bestSpan, 'score' : bestScore, 'result' : true};
-                    } else {
-                        numViolations++;
-                        currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'score' : 1, 'result' : true};
-                    }
-                } else {
-                    currentLogInfo[curKey] = {'count' : repetitionMap[eventTypeKey][curId], 'score' : 0, 'result' : false};
-                }
+                	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
+                	score *= (1 / span);
+                	avgLevel += score; 
+                	currentLogInfo[curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+                } else
+                	currentLogInfo[curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+                numScores++; 
             }
         }
+        
+        avgLevel /= numScores; 
 
-        currentLogInfo['num_violations'] = numViolations;
         currentLogInfo['num_interaction_types'] = intTypeCounter;
-        currentLogInfo['percentage'] = numViolations / intTypeCounter;
+        currentLogInfo['num_tuples'] = numScores;
         currentLog['info'] = currentLogInfo;
-
-        if (violationThreshold >= 1) {
-            if (numViolations > violationThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        } else {
-            if ((numViolations / intTypeCounter) > violationThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        }
+        // metric level in this case represents the average metric level across all (interaction, data item) tuples
+        currentLog['metric_level'] = avgLevel;
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
 
-// bias is defined as the variance between the data that has been examined
-// indNumThreshold (optional) indicates the p-value below which the f-test would reject the hypothesis that the data items interacted with and the actual distribution are the same for numerical attributes (defaults to 0.1)
-// indCatThreshold (optional) indicates the p-value below which the chi-squared test would reject the hypothesis that the data items interacted with and the actual distribution are the same for categorical attributes (defaults to 0.1)
-// percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
+// the variance metric relates to the variance of the data interacted with compared to the variance of the dataset as a whole
+// metric(a_m) = 1 - p, where p is defined as the F statistic (numerical attributes) or the Chi^2 statistic (categorical attributes) for attribute a_m
+// F = var(D_U(a_m)) / var(D(a_m), where D_U is the data the user has interacted with
+// CHI^2 = SUM(O(a_m,k) - E(a_m,k))^2 / E(a_m,k), 
+//    where O is the observed number of data points interacted with that have value k for attribute a_m 
+//    and E is the expected number of data points interacted with that have value k for attribute a_m
+// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeVarianceBias = function(indNumThreshold, indCatThreshold, percAttrThreshold, time, interactionTypes) {
+    ial.computeVarianceBias = function(time, interactionTypes) {
         var attributeValueMap = ial.getAttributeValueMap();
-        if (typeof indNumThreshold === 'undefined' || isNaN(parseFloat(indNumThreshold)) || indNumThreshold < 0 || indNumThreshold > 1) indNumThreshold = 0.1;
-        if (typeof indCatThreshold === 'undefined' || isNaN(parseFloat(indCatThreshold)) || indCatThreshold < 0 || indCatThreshold > 1) indCatThreshold = 0.1;
-        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
         var curDate = new Date();
         currentLog['bias_type'] = this.BIAS_VARIANCE;
         currentLog['current_time'] = new Date();
-        currentLog['threshold'] = {'individual_numerical_threshold' : indNumThreshold, 'individual_categorical_threshold' : indCatThreshold, 'percent_attribute_threshold' : percAttrThreshold};
         currentLog['number_of_logs'] = interactionSubset.length;
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
@@ -1901,66 +1868,27 @@
         var dataSubset = [];
         for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
 
-        var numAttributes = 0;
-        var numViolations = 0;
         var varianceVector = {};
+        var avgProb = 0;
 
         for (var attr in attributeValueMap) {
             varianceVector[attr] = {};
             if (attributeValueMap[attr].dataType == 'numeric') {
-                numAttributes++;
                 var curVariance = Number(computeAttributeVariance(dataSubset, attr));
                 var fullVariance = Number(attributeValueMap[attr]['variance']);
+                var fValue = curVariance / fullVariance;
+                var dfFull = this.dataSet.length - 1; 
+                var dfSub = dataSubset.length - 1; 
+                var prob = getFPercent(fValue, dfSub, dFull);
+                avgProb += prob;
 
-                function beta2(testParam, df1, df2) {
-                    var a0 = 0;
-                    var b0 = 1;
-                    var a1 = 1;
-                    var b1 = 1;
-                    var m1 = 0;
-                    var a2 = 0;
-                    var c1;
-                    while (Math.abs((a1 - a2) / a1) > .00001) {
-                        a2 = a1;
-                        c1 = -(df1 + m1) * (df1 + df2 + m1) * testParam / (df1 + 2 * m1) / (df1 + 2 * m1 + 1);
-                        a0 = a1 + c1 * a0;
-                        b0 = b1 + c1 * b0;
-                        m1++;
-                        c1 = m1 * (df2 - m1) * testParam / (df1 + 2 * m1 - 1) / (df1 + 2 * m1);
-                        a1 = a0 + c1 * a1;
-                        b1 = b0 + c1 * b1;
-                        a0 /= b1;
-                        b0 /= b1;
-                        a1 /= b1;
-                        b1 = 1;
-                    }
-                    return a1 / df1;
-                }
-
-                function beta1(testParam, df1, df2) {
-                    var prob;
-                    var temp = df1 + df2;
-                    var bt = Math.exp(ial.utils.logGamma(temp) - ial.utils.logGamma(df2) - ial.utils.logGamma(df1) + df1 * Math.log(testParam) + df2 * Math.log(1 - testParam));
-                    if (testParam < (df1 + 1) / (temp + 2)) prob = bt * beta2(testParam, df1, df2);
-                    else prob = 1 - bt * beta2(1 - testParam, df2, df1);
-                    return prob;
-                }
-
-                var fValue = 1.0 / (curVariance / fullVariance);
-                dfFull = this.dataSet.length - 1; 
-                dfSub = dataSubset.length - 1; 
-                var testParam = fValue / (fValue + dfSub / dfFull);
-                var result = beta1(testParam, dfFull / 2, dfSub / 2);
-                result = Math.round(result * 100000) / 100000;
-
+                varianceVector[attr]["type"] = "numeric";
                 varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
                 varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
                 varianceVector[attr]["f_value"] = fValue;
-                varianceVector[attr]["p_value"] = result; 
-                if (result < indNumThreshold) numViolations++;
+                varianceVector[attr]["metric_level"] = prob; 
 
             } else if (attributeValueMap[attr].dataType == 'categorical') {
-                numAttributes++;
                 // variance for categorical attributes returns chi-squared test
                 var distr = computeCategoricalDistribution(dataSubset, attr);
                 var fullDistr = attributeValueMap[attr]["distribution"];
@@ -1972,82 +1900,33 @@
                     chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
                 }
                 var degFree = Object.keys(fullDistr).length - 1;
-
-                var gamma = function(x, df) {
-                    var gammaResult;
-                    if (x <= 0) gammaResult = 0;
-                    else if (x < df + 1) {
-                        var t1 = 1 / df;
-                        var prob = t1;
-                        var count = 1;
-                        while (t1 > prob * .00001) {
-                            t1 = t1 * x / (df + count);
-                            prob = prob + t1;
-                            count = count + 1;
-                        }
-                        prob = prob * Math.exp(df * Math.log(x) - x - ial.utils.logGamma(df));
-                        return prob;
-                    } else {
-                        var a0 = 0;
-                        var b0 = 1;
-                        var a1 = 1;
-                        var b1 = x;
-                        var aOld = 0;
-                        var count = 0;
-                        while (Math.abs((a1 - aOld) / a1) > .00001) {
-                            aOld = a1;
-                            count = count + 1;
-                            a0 = a1 + (count - df) * a0;
-                            b0 = b1 + (count - df) * b0;
-                            a1 = x * a0 + count * a1;
-                            b1 = x * b0 + count * b1;
-                            a0 = a0 / b1;
-                            b0 = b0 / b1;
-                            a1 = a1 / b1;
-                            b1 = 1;
-                        }
-                        var prob = 1.0 - (Math.exp(df * Math.log(x) - x - ial.utils.logGamma(df)) * a1);
-                        return prob;
-                    }
-
-                    return gammaResult;
-                }
-
-                var result = gamma(chiSq / 2, degFree / 2);
-                result = 1.0 - (Math.round(result * 100000) / 100000);
+                var prob = getChiSquarePercent(chiSq, df);
+                avgProb += prob;
+                
+                varianceVector[attr]["type"] = "categorical";
                 varianceVector[attr]["degrees_of_freedom"] = degFree; 
                 varianceVector[attr]["chi_squared"] = chiSq;
-                varianceVector[attr]["p_value"] = result; 
-                if (result < indCatThreshold) numViolations++;
+                varianceVector[attr]["metric_level"] = prob; 
             }
         }
+        avgProb /= Object.keys(attributeValueMap).length;
 
         currentLogInfo['variance_vector'] = varianceVector;
-        currentLogInfo['num_violations'] = numViolations;
         currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
-        currentLogInfo['percentage'] = numViolations / numAttributes;
         currentLog['info'] = currentLogInfo;
-
-        if (percAttrThreshold >= 1) {
-            if (numViolations > percAttrThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        } else {
-            if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        }
+        // metric level in this case represents the average metric level across all attributes
+        currentLog['metric_level'] = avgProb;
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
 
-// bias is defined as the average percent change in the distribution of attribute weights
-// indThreshold (optional) indicates the minimum percent change in an attribute's weight that is tolerated (defaults to 0.5)
-// percAttrThreshold (optional) indicates what number or percentage of attributes can be below indThreshold (defaults to 0.5)
-// scoreType (optional) metric for when individual attribute weight change is in violation (span, average, or max)
-    ial.computeAttributeWeightBias = function(indThreshold, percAttrThreshold, scoreType, time) {
+// the attribute weight metric relates to the percent change in each attribute's weight over time
+// metric(a_m) = 1 - |w_a_m(t + d) - w_a_m(t)| / w_a_m(t), where w_a_m(t) is the weight of attribute a_m at time t
+// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+// scoreType (optional) alternative ways to consider an attribute's change in weight (span, average, min, or max - defaults to span)
+    ial.computeAttributeWeightBias = function(time, scoreType) {
         var attributeValueMap = ial.getAttributeValueMap();
-        if (typeof indThreshold === 'undefined' || isNaN(parseFloat(indThreshold)) || indThreshold > 1 || indThreshold < 0) indThreshold = 0.1;
-        if (typeof percAttrThreshold === 'undefined' || isNaN(parseFloat(percAttrThreshold)) || percAttrThreshold < 0 || percAttrThreshold > Object.keys(attributeValueMap).length) percAttrThreshold = 0.5;
         if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0];
         var weightVectorSubset = getWeightVectorQueueSubset(time);
 
@@ -2055,38 +1934,34 @@
         var curDate = new Date();
         currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT;
         currentLog['current_time'] = new Date();
-        currentLog['threshold'] = {'individual_threshold' : indThreshold, 'percent_attribute_threshold' : percAttrThreshold};
         currentLog['number_of_logs'] = weightVectorSubset.length;
         var currentLogInfo = {};
         currentLogInfo['score_type'] = scoreType;
 
         if (weightVectorSubset.length < 1) {
             currentLog['info'] = currentLogInfo;
-            currentLog['result'] = false;
             return currentLog;
         }
 
-        var numViolations = 0;
-        var numAttributes = Object.keys(attributeValueMap).length;
         var changeVector = {};
         if (scoreType == 'span') {
+        	// consider only the oldest and most recent weight vectors
             var firstVector = weightVectorSubset[0].oldWeight;
             var lastVector = weightVectorSubset[weightVectorSubset.length - 1].newWeight;
             for (var curKey in attributeValueMap) {
                 if (firstVector.hasOwnProperty(curKey) && lastVector.hasOwnProperty(curKey)) {
-                    var curChange = Math.abs(firstVector[curKey] - lastVector[curKey]);
+                	changeVector[curKey] = {};
+                    var curChange = Math.abs(lastVector[curKey] - firstVector[curKey]);
                     if (firstVector[curKey] != 0) curChange = curChange / firstVector[curKey];
+                    changeVector[curKey]['old'] = firstVector[curKey]; 
+                    changeVector[curKey]['new'] = lastVector[curKey];
+                    changeVector[curKey]['change'] = curChange;
                     if (curChange > 1) curChange = 1; // set maximum change to be 1
-                    changeVector[curKey] = curChange;
-                    if (curChange < indThreshold) numViolations++;
+                    changeVector[curKey]['metric_level'] = curChange;
                 }
             }
-
-            currentLogInfo["first"] = firstVector;
-            currentLogInfo["last"] = lastVector;
-            currentLogInfo['percent_change_vector'] = changeVector;
-        } else if (scoreType == 'max') {
-            // consider it a violation if the largest change in weight to a given attribute is below the threshold
+        } else if (scoreType == 'min') {
+            // consider the smallest change in weight for each attribute
             for (var i = 0; i < weightVectorSubset.length; i++) {
                 var oldVector = weightVectorSubset[i].oldWeight;
                 var newVector = weightVectorSubset[i].newWeight;
@@ -2094,20 +1969,37 @@
                     if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
                         var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
                         if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
-                        if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        if ((!changeVector.hasOwnProperty(curKey)) || (changeVector.hasOwnProperty(curKey) && curChange > changeVector[curKey])) {
-                            changeVector[curKey] = curChange;
-                        }
-                    }
+                        if ((!changeVector.hasOwnProperty(curKey)) || (changeVector.hasOwnProperty(curKey) && curChange < changeVector[curKey]['change'])) {
+                        	changeVector[curKey] = {};
+                        	changeVector[curKey]['old'] = oldVector[curKey];
+                        	changeVector[curKey]['new'] = newVector[curKey];
+                        	changeVector[curKey]['change'] = curChange;
+                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
+                        	changeVector[curKey]['metric_level'] = curChange;
+                    	} 
+                    } 
                 }
             }
-
-            for (var curKey in attributeValueMap) {
-                if (changeVector.hasOwnProperty(curKey)) {
-                    if (changeVector[curKey] < indThreshold) numViolations++;
+        } else if (scoreType == 'max') {
+            // consider the largest change in weight for each attribute
+            for (var i = 0; i < weightVectorSubset.length; i++) {
+                var oldVector = weightVectorSubset[i].oldWeight;
+                var newVector = weightVectorSubset[i].newWeight;
+                for (var curKey in attributeValueMap) {
+                    if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
+                        var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
+                        if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
+                        if ((!changeVector.hasOwnProperty(curKey)) || (changeVector.hasOwnProperty(curKey) && curChange > changeVector[curKey]['change'])) {
+                        	changeVector[curKey] = {};
+                        	changeVector[curKey]['old'] = oldVector[curKey];
+                        	changeVector[curKey]['new'] = newVector[curKey];
+                        	changeVector[curKey]['change'] = curChange;
+                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
+                        	changeVector[curKey]['metric_level'] = curChange;
+                    	} 
+                    } 
                 }
             }
-            currentLogInfo['max_change_vector'] = changeVector;
         } else {
             // compute as scoreType = 'average'
             var mult = 1 / weightVectorSubset.length;
@@ -2118,37 +2010,81 @@
                     if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
                         var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
                         if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
-                        if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        if (changeVector.hasOwnProperty(curKey)) changeVector[curKey] += (mult * curChange);
-                        else changeVector[curKey] = (mult * curChange);
+                        if (changeVector.hasOwnProperty(curKey)) {
+                        	changeVector[curKey]['change'] += (mult * curChange);
+                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
+                        	changeVector[curKey]['metric_level'] += (mult * curChange);
+                        } else {
+                        	changeVector[curKey] = {};
+                        	changeVector[curKey]['change'] = (mult * curChange);
+                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
+                        	changeVector[curKey]['metric_level'] = (mult * curChange);
+                        }
                     }
                 }
             }
-
-            for (var curKey in attributeValueMap) {
-                if (changeVector.hasOwnProperty(curKey)) {
-                    if (changeVector[curKey] < indThreshold) numViolations++;
-                }
-            }
-            currentLogInfo['average_change_vector'] = changeVector;
         }
+        
+        var avgLevel = 0; 
+        for (var curKey in attributeValueMap)
+        	avgLevel += changeVector[curKey]['metric_level'];
+        avgLevel /= Object.keys(attributeValueMap).length;
 
-        currentLogInfo['num_violations'] = numViolations;
-        currentLogInfo['num_attributes'] = numAttributes;
-        currentLogInfo['percentage'] = numViolations / numAttributes;
+        currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
         currentLog['info'] = currentLogInfo;
-
-        if (percAttrThreshold >= 1) {
-            if (numViolations > percAttrThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        } else {
-            if ((numViolations / numAttributes) > percAttrThreshold) currentLog['result'] = true;
-            else currentLog['result'] = false;
-        }
+        // metric level in this case represents the average metric level across all attributes
+        currentLog['metric_level'] = avgLevel;
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
+    
+// the screen time metric relates to how long each data item is visible on the screen
+// metric(n) = 1- p, where p is defined as the probability of the Z-statistic (number of standard deviations from the mean)
+    ial.computeScreenTimeBias = function() {
+    	 var currentLog = {};
+         currentLog['bias_type'] = this.BIAS_SCREEN_TIME;
+         currentLog['current_time'] = new Date();
+         currentLog['number_of_logs'] = this.dataSet.length;
+         var currentLogInfo = {};
+         
+    	 // compute average screen time
+    	 var avgTime = 0;
+    	 for (var index in this.dataSet) 
+    		 avgTime += this.dataSet[index]['ial']['screen_time'];
+    	 avgTime /= this.dataSet.length;
+    	 currentLogInfo['mean'] = avgTime;
+    	 
+    	 // compute standard deviation
+    	 var stdDev = 0; 
+    	 for (var index in this.dataSet)
+    		 stdDev += ((this.dataSet[index]['ial']['screen_time'] - avgTime) * (this.dataSet[index]['ial']['screen_time'] - avgTime));
+         stdDev /= this.dataSet.length; 
+         stdDev = Math.sqrt(stdDev);
+         currentLogInfo['standard_deviation'] = stdDev;
+         
+         // compute z-scores and probabilities
+         var scores = {};
+         var avgLevel = 0; 
+         for (var index in this.dataSet) {
+        	 scores[index] = {};
+        	 scores[index]['screen_time'] = this.dataSet[index]['ial']['screen_time'];
+        	 var zScore = (this.dataSet[index]['ial']['screen_time'] - avgTime) / stdDev;
+        	 scores[index]['z_score'] = zScore;
+        	 var prob = getZPercent(zScore); 
+        	 scores[index]['metric_level'] = prob; 
+        	 avgLevel += prob; 
+         }
+         avgLevel /= this.dataSet.length;
+
+         currentLogInfo['scores'] = scores;
+         currentLog['info'] = currentLogInfo;
+         // metric level in this case represents the average metric level across all data points
+         currentLog['metric_level'] = avgLevel;
+
+         this.biasLogs.push(currentLog);
+         return currentLog;
+     }
 
 
 
@@ -2223,4 +2159,161 @@
         }
         return list.sort(compare);
     }
+    
+/** Probability Distributions **/
+
+// private
+// get the percent probability given the z-score
+// where z-score represents number of standard deviations from the mean
+    function getZPercent(z) {
+    	// if z > 6.5 std dev's from the mean, it requires too many significant digits 
+        if ( z < -6.5)
+          return 0.0;
+        if ( z > 6.5) 
+          return 1.0;
+
+        // compute percent
+        var factK = 1;
+        var sum = 0;
+        var term = 1;
+        var k = 0;
+        var loopStop = Math.exp(-23);
+        while (Math.abs(term) > loopStop) {
+          term = .3989422804 * Math.pow(-1, k) * Math.pow(z, k) / (2 * k + 1) / Math.pow(2, k) * Math.pow(z, k + 1) / factK;
+          sum += term;
+          k++;
+          factK *= k;
+        }
+        sum += 0.5;
+
+        return sum;
+    }
+    
+// private 
+// get the percent probability given the f-statistic, numerator degrees of freedom (df1)
+// and denominator degrees of freedom (df2)
+    function getFPercent(f, df1, df2) {
+    	
+    	if (df1 <= 0) alert("Numerator degrees of freedom must be positive");
+    	else if (df2 <= 0) alert("Denominator degrees of freedom must be positive");
+    	else if (f <= 0) Fcdf = 0;
+    	else {
+    		Z = f / (f + df2 / df1);
+    		Fcdf = Betacdf(Z, df1 / 2, df2 / 2);
+    	}
+    	Fcdf = Math.round(Fcdf * 100000) / 100000;
+    	return Fcdf;
+    }
+    
+// private
+// get the percent probability given the chi^2 test statistic and degrees of freedom
+    function getChiSquarePercent(chiSq, df) {
+		if (df <= 0)
+			alert("Degrees of freedom must be positive");
+		else
+			Chisqcdf = Gammacdf(chiSq / 2, df / 2);
+		Chisqcdf = Math.round(Chisqcdf * 100000) / 100000;
+	    return Chisqcdf;
+    } 
+    
+/** Statistic Distribution Utility Functions **/
+    
+	function LogGamma(Z) {
+    	with (Math) {
+    		var S = 1 + 76.18009173 / Z - 86.50532033 / (Z + 1) + 24.01409822 / (Z + 2) - 1.231739516 / (Z + 3) + 0.00120858003 / (Z + 4) - 0.00000536382 / (Z + 5);
+    		var LG = (Z - 0.5) * log(Z + 4.5) - (Z + 4.5) + log(S * 2.50662827465);
+    	}
+    	return LG;
+    }
+
+    function Betinc(X, A, B) {
+    	var A0 = 0;
+    	var B0 = 1;
+    	var A1 = 1;
+    	var B1 = 1;
+    	var M9 = 0;
+    	var A2 = 0;
+    	var C9;
+    	while (Math.abs((A1 - A2) / A1) > 0.00001) {
+    		A2 = A1;
+    		C9 = -(A + M9) * (A + B + M9) * X / (A + 2 * M9) / (A + 2 * M9 + 1);
+    		A0 = A1 + C9 * A0;
+    		B0 = B1 + C9 * B0;
+    		M9 = M9 + 1;
+    		C9 = M9 * (B - M9) * X / (A + 2 * M9 - 1) / (A + 2 * M9);
+    		A1 = A0 + C9 * A1;
+    		B1 = B0 + C9 * B1;
+    		A0 = A0 / B1;
+    		B0 = B0 / B1;
+    		A1 = A1 / B1;
+    		B1 = 1;
+    	}
+    	return A1 / A;
+    }
+
+    function Betacdf(Z, A, B) {
+        var S;
+        var BT;
+        var Bcdf;
+    	with (Math) {
+    		S = A + B;
+    		BT = exp(LogGamma(S) - LogGamma(B) - LogGamma(A) + A * log(Z) + B * log(1 - Z));
+    		if (Z < (A + 1) / (S + 2))
+    			Bcdf = BT * Betinc(Z, A, B)
+    		else
+    			Bcdf = 1 - BT * Betinc(1 - Z, B, A)
+    	}
+    	return Bcdf;
+    }
+
+	function Gcf(X, A) { // Good for X > A + 1
+		with (Math) {
+			var A0 = 0;
+			var B0 = 1;
+			var A1 = 1;
+			var B1 = X;
+			var AOLD = 0;
+			var N = 0;
+			while (abs((A1 - AOLD) / A1) > 0.00001) {
+				AOLD = A1;
+				N = N + 1;
+				A0 = A1 + (N - A) * A0;
+				B0 = B1 + (N - A) * B0;
+				A1 = X * A0 + N * A1;
+				B1 = X * B0 + N * B1;
+				A0 = A0 / B1;
+				B0 = B0 / B1;
+				A1 = A1 / B1;
+				B1 = 1;
+			}
+			var Prob = exp(A * log(X) - X - LogGamma(A)) * A1;
+		}
+		return 1 - Prob;
+	}
+
+	function Gser(X, A) { // Good for X < A + 1.
+	    with (Math) {
+			var T9 = 1 / A;
+			var G = T9;
+			var I = 1;
+			while (T9 > G * 0.00001) {
+				T9 = T9 * X / (A + I);
+				G = G + T9;
+				I = I + 1;
+			}
+			G = G * exp(A * log(X) - X - LogGamma(A));
+	    }
+	    return G;
+	}
+
+	function Gammacdf(x, a) {
+		var GI;
+		if (x <= 0)
+			GI = 0;
+		else if (x < a + 1)
+			GI = Gser(x, a);
+		else
+			GI = Gcf(x, a);
+		return GI;
+	}
 })();
