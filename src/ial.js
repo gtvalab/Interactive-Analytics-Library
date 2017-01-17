@@ -423,7 +423,7 @@
     };
 
     ial.addData = function (dataPoints) {
-        for(var dataPoint of dataPoints){
+    	dataPoints.forEach(function(dataPoint) {
             var newId = parseInt(this.dataSet[this.dataSet.length-1].ial.id);
             while(newId in this.ialIdToDataMap){
                 newId += 1;
@@ -436,7 +436,7 @@
 
             this.ialIdToDataMap[newId] = dataPoint;
             this.dataSet.push(dataPoint);
-        }
+        });
     };
 
     /*
@@ -1609,19 +1609,19 @@
             var mean = 0;
 
             // find mean
-            for (var curDataItem of data) {
+            data.forEach(function(curDataItem) {
                 var curValue = parseFloat(curDataItem[attr]);
                 mean += curValue;
-            }
+            });
             mean /= data.length;
 
             // find variance
             var variance = 0;
-            for (var curDataItem of data) {
+            data.forEach(function(curDataItem) {
                 var curValue = parseFloat(curDataItem[attr]);
                 var curSqDiff = (curValue - mean) * (curValue - mean);
                 variance += curSqDiff;
-            }
+            });
             variance /= data.length;
 
             return variance;
@@ -1689,7 +1689,7 @@
 // considerSpan (optional) considers distance between repeated interactions for repetition metric (defaults to true)
 // scoreType (optional) defines parameter for attribute weight metric (defaults to span)
 // returns true if bias is detected, false otherwise
-    ial.computeBias = function(totalThreshold = 0.5, metric, time, interactionTypes, considerSpan, scoreType) {
+    ial.computeBias = function(metric, time, interactionTypes, considerSpan, scoreType) {
         if (typeof metric !== 'undefined') {
             if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(time, scoreType);
             else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(time, interactionTypes, considerSpan);
@@ -1797,7 +1797,8 @@
                         intTypeCounter++;
                     }
                 } else {
-                    repetitionMap[eventTypeKey] = { [curId]: 1 };
+                	repetitionMap[eventTypeKey] = {};
+                    repetitionMap[eventTypeKey][curId] = 1; 
                     intTypeCounter++;
                 }
             }
@@ -1940,6 +1941,7 @@
 
         if (weightVectorSubset.length < 1) {
             currentLog['info'] = currentLogInfo;
+            currentLog['metric_level'] = 1;
             return currentLog;
         }
 
@@ -2204,8 +2206,14 @@
 // and denominator degrees of freedom (df2)
     function getFPercent(f, df1, df2) {
     	
-    	if (df1 <= 0) alert("Numerator degrees of freedom must be positive");
-    	else if (df2 <= 0) alert("Denominator degrees of freedom must be positive");
+    	if (df1 <= 0) {
+    		console.log('Numerator degrees of freedom must be positive');
+    		df1 = 1;
+    	}
+    	else if (df2 <= 0) {
+    		console.log('Denominator degrees of freedom must be positive');
+    		df2 = 1;
+    	}
     	else if (f <= 0) Fcdf = 0;
     	else {
     		Z = f / (f + df2 / df1);
@@ -2218,10 +2226,12 @@
 // private
 // get the percent probability given the chi^2 test statistic and degrees of freedom
     function getChiSquarePercent(chiSq, df) {
-		if (df <= 0)
-			alert("Degrees of freedom must be positive");
-		else
-			Chisqcdf = Gammacdf(chiSq / 2, df / 2);
+		if (df <= 0) {
+			console.log('Degrees of freedom must be positive');
+			df = 1; 
+		}
+		
+		Chisqcdf = Gammacdf(chiSq / 2, df / 2);
 		Chisqcdf = Math.round(Chisqcdf * 100000) / 100000;
 	    return Chisqcdf;
     } 
