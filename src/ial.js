@@ -1750,10 +1750,14 @@
         currentLogInfo['max_interactions'] = maxInteractions;
         currentLogInfo['unique_data'] = idSet.size;
         currentLogInfo['percentage'] = percentUnique;
+        if (interactionSubset.length == 0) // 0 if no interactions
+        	currentLogInfo['percentage'] = 0;
         currentLog['info'] = currentLogInfo;
         
         // lower percent of unique interactions -> higher level of bias
         currentLog['metric_level'] = 1.0 - percentUnique; 
+        if (interactionSubset.length == 0) // 0 if no interactions
+        	currentLog['metric_level'] = 0;
 
         this.biasLogs.push(currentLog);
         return currentLog;
@@ -1779,6 +1783,13 @@
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
         currentLogInfo['consider_span'] = considerSpan;
+        
+        if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
+        	currentLog['info'] = currentLogInfo;
+        	currentLog['number_of_logs'] = interactionSubset.length;
+        	currentLog['metric_level'] = 0;
+        	return currentLog;
+        }
 
         // create a map to track # of occurrences of each (interaction, data item) tuple
         var repetitionMap = {};
@@ -1826,6 +1837,8 @@
 
                 	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
                 	score *= (1 / span);
+                	if (occurrenceIndices.length == 1) score = 0;
+                	// TODO: should this only count if it's more than 1 interaction? 
                 	avgLevel += score; 
                 	currentLogInfo[curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
                 } else
@@ -1865,6 +1878,12 @@
         currentLog['number_of_logs'] = interactionSubset.length;
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
+        
+        if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
+        	currentLog['info'] = currentLogInfo;
+        	currentLog['metric_level'] = 0;
+        	return currentLog;
+        }
 
         var dataSubset = [];
         for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
@@ -1939,9 +1958,9 @@
         var currentLogInfo = {};
         currentLogInfo['score_type'] = scoreType;
 
-        if (weightVectorSubset.length < 1) {
+        if (Object.keys(weightVectorSubset).length == 0) {
             currentLog['info'] = currentLogInfo;
-            currentLog['metric_level'] = 1;
+            currentLog['metric_level'] = 0;
             return currentLog;
         }
 

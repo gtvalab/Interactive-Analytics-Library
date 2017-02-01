@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title></title>
     <script src="js/lib/d3.min.js" type="text/javascript"></script>
-    <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
     <script src="js/lib/d3.tip.js" type="text/javascript"></script>
     <script src="js/lib/d3.slider.js" type="text/javascript"></script>
     <script src="js/lib/nv.d3.min.js" type="text/javascript"></script>
@@ -207,7 +206,7 @@
                         </div>
                         <hr>
                         <!--<form>-->
-                        <button class="btn-default" id="generateAndApplyWeightVectorButton">Update weight vector</button> using :
+                        <button class="btn btn-primary" id="generateAndApplyWeightVectorButton">Update weight vector</button> using :
                         <input type="radio" id="useSimilaritiesForWeightVectorComputation" name="calcMode" value="sim" checked> Similarity
                         <input type="radio" id="useDifferencesForWeightVectorComputation" name="calcMode" value="diff"> Differences
                         <!--</form>-->
@@ -311,18 +310,17 @@
                 </div>
                 <div id="collapseEight" class="panel-collapse collapse">
                     <div class="panel-body">
-                        <button id="computeSubsetBias" class="btn btn-primary" style="float: left;">Compute Subset Metric</button>
-                        <button id="computeVarianceBias" class="btn btn-primary" style="float: right;">Compute Variance Metric</button>
+                        <button id="computeSubsetBias" class="btn btn-primary">Subset Metric</button>
+                        <button id="computeVarianceBias" class="btn btn-primary">Variance Metric</button>
+                        <button id="computeRepetitionBias" class="btn btn-primary">Repetition Metric</button>
+                        <button id="computeAttributeWeightBias" class="btn btn-primary">Attribute Weight Metric</button>
+                        <!-- <button id="computeScreenTimeBias" class="btn btn-primary">Screen Time Metric</button> -->
                         <br>
-                        <button id="computeRepetitionBias" class="btn btn-primary" style="float: left;">Compute Repetition Metric</button>
-                        <button id="computeAttributeWeightBias" class="btn btn-primary" style="float: right;">Compute Attribute Weight Metric</button>
-                        <br>
-                        <button id="computeScreenTimeBias" class="btn btn-primary" style="float: left;">Compute Screen Time Metric</button>
-                        <button id="computeAllBias" class="btn btn-primary" style="float: right;">Compute All Metrics</button>
-                        <br>
+                        <button id="computeAllBias" class="btn btn-primary">Compute All Metrics</button>
+                        <br><br>
                         <p>
                             Filename: <input type="text" id="downloadBiasFileName">
-                            <button id="downloadBiasLogs" class="btn btn-primary" style="float: center;">Download Bias Logs</button>
+                            <button id="downloadBiasLogs" class="btn btn-primary">Download Logs</button>
                         </p>
                         <div id="biasResultsDiv"></div>
                     </div>

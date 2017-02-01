@@ -626,6 +626,7 @@
                 newWeightVector[d.label]=barWidthToAttributeWeightScale(d.width);
             }
         });
+        console.log(newWeightVector);
         ial.setAttributeWeightVector(newWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
         updateAttributeWeightDiv();
     });
@@ -956,6 +957,7 @@
         }else if(document.getElementById("useDifferencesForWeightVectorComputation").checked == true) {
             derivedWeightVector = ial.generateAttributeWeightVectorUsingDifferences(interestObjectsList);
         }
+        
         ial.setAttributeWeightVector(derivedWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
         updateAttributeWeightDiv();
     }
