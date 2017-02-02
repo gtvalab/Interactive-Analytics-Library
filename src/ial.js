@@ -1749,9 +1749,9 @@
 
         currentLogInfo['max_interactions'] = maxInteractions;
         currentLogInfo['unique_data'] = idSet.size;
-        currentLogInfo['percentage'] = percentUnique;
         if (interactionSubset.length == 0) // 100% unique if no interactions
-        	currentLogInfo['percentage'] = 1;
+        	percentUnique = 1;
+        currentLogInfo['percentage'] = percentUnique;
         currentLog['info'] = currentLogInfo;
         
         // lower percent of unique interactions -> higher level of bias
