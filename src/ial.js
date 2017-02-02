@@ -1750,14 +1750,12 @@
         currentLogInfo['max_interactions'] = maxInteractions;
         currentLogInfo['unique_data'] = idSet.size;
         currentLogInfo['percentage'] = percentUnique;
-        if (interactionSubset.length == 0) // 0 if no interactions
-        	currentLogInfo['percentage'] = 0;
+        if (interactionSubset.length == 0) // 100% unique if no interactions
+        	currentLogInfo['percentage'] = 1;
         currentLog['info'] = currentLogInfo;
         
         // lower percent of unique interactions -> higher level of bias
-        currentLog['metric_level'] = 1.0 - percentUnique; 
-        if (interactionSubset.length == 0) // 0 if no interactions
-        	currentLog['metric_level'] = 0;
+        currentLog['metric_level'] = 1.0 - percentUnique;
 
         this.biasLogs.push(currentLog);
         return currentLog;
@@ -1879,14 +1877,51 @@
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
         
-        if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
+        var dataSubset = [];
+        for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
+        var varianceVector = {};
+        
+        // special case of < 2 interactions to compute on: metric level should be 0
+        if (Object.keys(interactionSubset).length < 2) { // 0 if < 2 interactions
+        	for (var attr in attributeValueMap) {
+                varianceVector[attr] = {};
+                varianceVector[attr]["type"] = attributeValueMap[attr].dataType;
+
+                varianceVector[attr]["type"] = attributeValueMap[attr].dataType;
+                varianceVector[attr]["metric_level"] = 0;
+                if (attributeValueMap[attr].dataType == "numeric") {
+                	var curVariance = 0;
+                    var fullVariance = Number(attributeValueMap[attr]['variance']);
+                    var fValue = curVariance / fullVariance;
+                    var dfFull = this.dataSet.length - 1; 
+                    var dfSub = dataSubset.length - 1; 
+	                varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
+	                varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
+	                varianceVector[attr]["f_value"] = fValue;
+                } else if (attributeValueMap[attr].dataType == "categorical") {
+                    // variance for categorical attributes returns chi-squared test
+                    var distr = computeCategoricalDistribution(dataSubset, attr);
+                    var fullDistr = attributeValueMap[attr]["distribution"];
+                    var chiSq = 0; 
+                    for (attrVal in fullDistr) {
+                        var expVal = dataSubset.length * (parseFloat(fullDistr[attrVal]) / this.dataSet.length);
+                        var obsVal = 0; 
+                        if (distr.hasOwnProperty(attrVal)) obsVal = parseFloat(distr[attrVal]);
+                        chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
+                    }
+                    var degFree = Object.keys(fullDistr).length - 1;
+                    
+                    varianceVector[attr]["degrees_of_freedom"] = degFree; 
+                    varianceVector[attr]["chi_squared"] = chiSq;
+                }
+            }
+        	
+        	currentLogInfo['variance_vector'] = varianceVector;
+            currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
         	currentLog['info'] = currentLogInfo;
         	currentLog['metric_level'] = 0;
         	return currentLog;
         }
-
-        var dataSubset = [];
-        for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
 
         var varianceVector = {};
         var avgProb = 0;
