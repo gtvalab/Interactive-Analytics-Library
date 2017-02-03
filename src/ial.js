@@ -1784,7 +1784,7 @@
         
         if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
         	currentLog['info'] = currentLogInfo;
-        	currentLog['number_of_logs'] = interactionSubset.length;
+        	currentLog['number_of_logs'] = 0;
         	currentLog['metric_level'] = 0;
         	return currentLog;
         }
