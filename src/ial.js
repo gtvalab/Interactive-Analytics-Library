@@ -1835,13 +1835,13 @@
                 	}
 
                 	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
-                	score *= (1 / span);
+                	score = repetitionMap[eventTypeKey][curId] / span;
                 	if (occurrenceIndices.length == 1) score = 0;
                 	// TODO: should this only count if it's more than 1 interaction? 
-                	avgLevel += score; 
                 	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
                 } else
                 	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+                avgLevel += score; 
                 numScores++; 
             }
         }
