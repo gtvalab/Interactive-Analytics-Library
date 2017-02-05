@@ -1781,6 +1781,7 @@
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
         currentLogInfo['consider_span'] = considerSpan;
+        currentLogInfo['repetition_vector'] = {};
         
         if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
         	currentLog['info'] = currentLogInfo;
@@ -1838,9 +1839,9 @@
                 	if (occurrenceIndices.length == 1) score = 0;
                 	// TODO: should this only count if it's more than 1 interaction? 
                 	avgLevel += score; 
-                	currentLogInfo[curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+                	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
                 } else
-                	currentLogInfo[curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+                	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
                 numScores++; 
             }
         }
