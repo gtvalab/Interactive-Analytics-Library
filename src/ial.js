@@ -1747,6 +1747,7 @@
 
         var percentUnique = idSet.size / maxInteractions;
 
+        currentLogInfo['visited'] = idSet;
         currentLogInfo['max_interactions'] = maxInteractions;
         currentLogInfo['unique_data'] = idSet.size;
         if (interactionSubset.length == 0) // 100% unique if no interactions
@@ -1838,9 +1839,9 @@
                 	score = repetitionMap[eventTypeKey][curId] / span;
                 	if (occurrenceIndices.length == 1) score = 0;
                 	// TODO: should this only count if it's more than 1 interaction? 
-                	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
                 } else
-                	currentLogInfo['repetition_vector'][curKey] = {'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
                 avgLevel += score; 
                 numScores++; 
             }
@@ -1942,7 +1943,7 @@
                 varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
                 varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
                 varianceVector[attr]["f_value"] = fValue;
-                varianceVector[attr]["metric_level"] = prob; // TODO: should this be prob or 1 - prob? 
+                varianceVector[attr]["metric_level"] = prob;
 
             } else if (attributeValueMap[attr].dataType == 'categorical') {
                 // variance for categorical attributes returns chi-squared test
@@ -1962,7 +1963,7 @@
                 varianceVector[attr]["type"] = "categorical";
                 varianceVector[attr]["degrees_of_freedom"] = degFree; 
                 varianceVector[attr]["chi_squared"] = chiSq;
-                varianceVector[attr]["metric_level"] = prob; // TODO: should this be prob or 1 - prob? 
+                varianceVector[attr]["metric_level"] = prob;
             }
         }
         avgProb /= Object.keys(attributeValueMap).length;
