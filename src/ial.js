@@ -1690,9 +1690,10 @@
 // scoreType (optional) defines parameter for attribute weight metric (defaults to span)
 // returns true if bias is detected, false otherwise
     ial.computeBias = function(metric, time, interactionTypes, considerSpan, scoreType) {
+    	var aggregate = true;
         if (typeof metric !== 'undefined') {
             if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(time, scoreType);
-            else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(time, interactionTypes, considerSpan);
+            else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(time, interactionTypes, aggregate, considerSpan);
             else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(time, interactionTypes);
             else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
             else return ial.computeVarianceBias(time, interactionTypes);
@@ -1700,7 +1701,7 @@
             var numMetrics = this.BIAS_TYPES.length;
             var biasResultMap = {};
             var attributeWeightBias = ial.computeAttributeWeightBias(time, scoreType);
-            var repetitionBias = ial.computeRepetitionBias(time, interactionTypes, considerSpan);
+            var repetitionBias = ial.computeRepetitionBias(time, interactionTypes, aggregate, considerSpan);
             var subsetBias = ial.computeSubsetBias(time, interactionTypes);
             var varianceBias = ial.computeVarianceBias(time, interactionTypes);
             var screenTimeBias = ial.computeScreenTimeBias();
@@ -1766,12 +1767,14 @@
 // metric(t, n) = (# of interactions of type t with d_n) / (total number of interactions)
 // time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+// aggregate (optional) aggregates all interaction types for each data item
 // considerSpan = true lowers contributing score of repetitions by scaling according to how spread out the interactions are
 //   interactions are weighted: 
 //     if considerSpan: score = (number of repeated interactions / total number of interactions) * (1 / difference in indices of first and last occurrence)
 //     else: number of repeated interactions / total number of interactions
-    ial.computeRepetitionBias = function(time, interactionTypes, considerSpan) {
+    ial.computeRepetitionBias = function(time, interactionTypes, aggregate, considerSpan) {
         if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
+        if (typeof aggregate === 'undefined' || (aggregate != true && aggregate != false)) aggregate = true;
         var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
         var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
 
@@ -1781,6 +1784,7 @@
         currentLog['current_time'] = new Date();
         var currentLogInfo = {};
         currentLogInfo['interaction_types'] = interactionTypes;
+        currentLogInfo['aggregate'] = aggregate;
         currentLogInfo['consider_span'] = considerSpan;
         currentLogInfo['repetition_vector'] = {};
         
@@ -1818,35 +1822,78 @@
 
         var avgLevel = 0; 
         var numScores = 0; 
-        for (var eventTypeKey in repetitionMap) {
-            var curQueue = repetitionMap[eventTypeKey];
-            for (var curId in curQueue) {
-                var curKey = eventTypeKey + "," + curId;
-                var score = repetitionMap[eventTypeKey][curId] / numLogsCounter;
-                if (considerSpan) {
-
-                	// find indices of when eventTypeKey occurred with data item curId
-                	var occurrenceIndices = [];
-                	for (var j = 0; j < origInteractionSubset.length; j++) {
-                		var curObj = origInteractionSubset[j];
-                		if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
-                			occurrenceIndices.push(j);
-                			if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
-                		}
-                	}
-
-                	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
-                	score = repetitionMap[eventTypeKey][curId] / span;
-                	if (occurrenceIndices.length == 1) score = 0;
-                	// TODO: should this only count if it's more than 1 interaction? 
-                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
-                } else
-                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
-                avgLevel += score; 
-                numScores++; 
-            }
-        }
         
+        // aggregate all of the scores across all interaction types
+        if (aggregate) {
+        	var aggMap = {};
+        	// aggregate the interaction types in a new dictionary
+        	for (var eventTypeKey in repetitionMap) {
+	            var curQueue = repetitionMap[eventTypeKey];
+	            for (var curId in curQueue) {
+	            	if (aggMap.hasOwnProperty(curId)) {
+	            		aggMap[curId] += repetitionMap[eventTypeKey][curId];
+	            	} else {
+	            		aggMap[curId] = {};
+	            		aggMap[curId] = repetitionMap[eventTypeKey][curId];
+	            	}
+	            }
+        	}
+        	
+        	for (var curId in aggMap) {
+	        	var score = aggMap[curId] / numLogsCounter;
+	            if (considerSpan) {
+	
+	            	// find indices of interactions with data item curId
+	            	var occurrenceIndices = [];
+	            	for (var j = 0; j < origInteractionSubset.length; j++) {
+	            		var curObj = origInteractionSubset[j];
+	            		if (curObj.dataItem.ial.id == curId) {
+	            			occurrenceIndices.push(j);
+	            			if (occurrenceIndices.length == aggMap[curId]) break;
+	            		}
+	            	}
+	
+	            	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
+	            	score = aggMap[curId] / span;
+	            	if (occurrenceIndices.length == 1) score = 0;
+	            	// TODO: should this only count if it's more than 1 interaction? 
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'metric_level' : score, 'count' : aggMap[curId], 'span' : span};
+	            } else
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'metric_level' : score, 'count' : aggMap[curId], 'span' : 1};
+	            avgLevel += score; 
+	            numScores++; 
+        	}
+        	
+        } else {
+	        for (var eventTypeKey in repetitionMap) {
+	            var curQueue = repetitionMap[eventTypeKey];
+	            for (var curId in curQueue) {
+	                var curKey = eventTypeKey + "," + curId;
+	                var score = repetitionMap[eventTypeKey][curId] / numLogsCounter;
+	                if (considerSpan) {
+	
+	                	// find indices of when eventTypeKey occurred with data item curId
+	                	var occurrenceIndices = [];
+	                	for (var j = 0; j < origInteractionSubset.length; j++) {
+	                		var curObj = origInteractionSubset[j];
+	                		if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
+	                			occurrenceIndices.push(j);
+	                			if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
+	                		}
+	                	}
+	
+	                	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
+	                	score = repetitionMap[eventTypeKey][curId] / span;
+	                	if (occurrenceIndices.length == 1) score = 0;
+	                	// TODO: should this only count if it's more than 1 interaction? 
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+	                } else
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+	                avgLevel += score; 
+	                numScores++; 
+	            }
+	        }
+        }
         avgLevel /= numScores; 
 
         currentLogInfo['num_interaction_types'] = intTypeCounter;
@@ -2270,7 +2317,8 @@
     		console.log('Denominator degrees of freedom must be positive');
     		df2 = 1;
     	}
-    	else if (f <= 0) Fcdf = 0;
+    	
+    	if (f <= 0) Fcdf = 0;
     	else {
     		Z = f / (f + df2 / df1);
     		Fcdf = Betacdf(Z, df1 / 2, df2 / 2);
