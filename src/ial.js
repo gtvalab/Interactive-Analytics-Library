@@ -1764,16 +1764,19 @@
     }
 
 // the repetition metric relates to the number of times a particular data item has been interacted with
-// metric(t, n) = (# of interactions of type t with d_n) / (total number of interactions)
+// metric(t, n) = 1- p, where p is defined as the probability of the Z-statistic (number of standard deviations from the mean)
 // time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 // interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 // aggregate (optional) aggregates all interaction types for each data item
 // considerSpan = true lowers contributing score of repetitions by scaling according to how spread out the interactions are
 //   interactions are weighted: 
-//     if considerSpan: score = (number of repeated interactions / total number of interactions) * (1 / difference in indices of first and last occurrence)
-//     else: number of repeated interactions / total number of interactions
+//     if considerSpan: score = (number of occurrences / total number of interactions) * (average span of occurrences)
+//     else: number of occurrences / total number of interactions
+// TODO: considerSpan option seems to produce unexpected results    
     ial.computeRepetitionBias = function(time, interactionTypes, aggregate, considerSpan) {
-        if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = true;
+    	// TODO: considerSpan option doesn't seem to be computing values as expected
+        // TODO: choose a different statistical test that doesn't assume normality
+    	if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = false;
         if (typeof aggregate === 'undefined' || (aggregate != true && aggregate != false)) aggregate = true;
         var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
         var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
@@ -1821,6 +1824,7 @@
         currentLog['number_of_logs'] = numLogsCounter;
 
         var avgLevel = 0; 
+        var avgScore = 0; 
         var numScores = 0; 
         
         // aggregate all of the scores across all interaction types
@@ -1853,17 +1857,41 @@
 	            		}
 	            	}
 	
-	            	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
+	            	var span = (Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + occurrenceIndices.length - 1) / (occurrenceIndices.length - 1);
 	            	score = aggMap[curId] / span;
+
 	            	if (occurrenceIndices.length == 1) score = 0;
 	            	// TODO: should this only count if it's more than 1 interaction? 
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'metric_level' : score, 'count' : aggMap[curId], 'span' : span};
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, /*'metric_level' : score, */ 'score': score, 'count' : aggMap[curId], 'span' : span};
 	            } else
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'metric_level' : score, 'count' : aggMap[curId], 'span' : 1};
-	            avgLevel += score; 
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, /*'metric_level' : score, */ 'score': score, 'count' : aggMap[curId], 'span' : 1};
+	            avgScore += score; 
 	            numScores++; 
         	}
-        	
+        	avgScore /= numScores;
+            currentLogInfo['average_score'] = avgScore;
+            
+            // compute standard deviation of scores
+        	var stdDev = 0;
+        	for (var curId in aggMap) {
+        		//console.log('**** current value: ' + currentLogInfo['repetition_vector'][curId]['score']);
+        		stdDev += ((currentLogInfo['repetition_vector'][curId]['score'] - avgScore) * (currentLogInfo['repetition_vector'][curId]['score'] - avgScore));
+        	}
+        	stdDev /= numScores; 
+            stdDev = Math.sqrt(stdDev);
+            currentLogInfo['standard_deviation'] = stdDev;
+            
+            // compute z-scores and probabilities
+            for (var curId in aggMap) {
+            	var zScore = (currentLogInfo['repetition_vector'][curId]['score'] - avgScore) / stdDev;
+            	if (stdDev == 0) zScore = -10; // can't divide by 0, force metric value to 0
+           	 	currentLogInfo['repetition_vector'][curId]['z_score'] = zScore;
+           	 	var prob = getZPercent(zScore); 
+           	 	currentLogInfo['repetition_vector'][curId]['metric_level'] = prob; 
+           	 	avgLevel += prob; 
+            }
+            avgLevel /= numScores;
+            
         } else {
 	        for (var eventTypeKey in repetitionMap) {
 	            var curQueue = repetitionMap[eventTypeKey];
@@ -1882,20 +1910,49 @@
 	                		}
 	                	}
 	
-	                	var span = Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + 1;
-	                	score = repetitionMap[eventTypeKey][curId] / span;
+	                	var span = (Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + occurrenceIndices.length - 1) / (occurrenceIndices.length - 1);
+		            	score = repetitionMap[eventTypeKey][curId] / span;
 	                	if (occurrenceIndices.length == 1) score = 0;
 	                	// TODO: should this only count if it's more than 1 interaction? 
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, /*'metric_level' : score, */ 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
 	                } else
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'metric_level' : score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
-	                avgLevel += score; 
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, /*'metric_level' : score, */ 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+	                avgScore += score; 
 	                numScores++; 
 	            }
 	        }
+	        avgScore /= numScores;
+	        currentLogInfo['average_score'] = avgScore;
+	        
+	        // compute standard deviation of scores
+        	var stdDev = 0;
+        	for (var eventTypeKey in repetitionMap) {
+	            var curQueue = repetitionMap[eventTypeKey];
+	            for (var curId in curQueue) {
+	                var curKey = eventTypeKey + "," + curId;
+	                stdDev += ((currentLogInfo['repetition_vector'][curKey]['score'] - avgScore) * (currentLogInfo['repetition_vector'][curKey]['score'] - avgScore));
+	            }
+        	}
+        	stdDev /= numScores; 
+            stdDev = Math.sqrt(stdDev);
+            currentLogInfo['standard_deviation'] = stdDev;
+            
+            // compute z-scores and probabilities
+            for (var eventTypeKey in repetitionMap) {
+	            var curQueue = repetitionMap[eventTypeKey];
+	            for (var curId in curQueue) {
+	                var curKey = eventTypeKey + "," + curId;
+	            	var zScore = (currentLogInfo['repetition_vector'][curKey]['score'] - avgScore) / stdDev;
+	            	if (stdDev == 0) zScore = -10; // can't divide by 0, force metric value to 0
+	           	 	currentLogInfo['repetition_vector'][curKey]['z_score'] = zScore;
+	           	 	var prob = getZPercent(zScore); 
+	           	 	currentLogInfo['repetition_vector'][curKey]['metric_level'] = prob; 
+	           	 	avgLevel += prob; 
+	            }
+            }
+            avgLevel /= numScores;
         }
-        avgLevel /= numScores; 
-
+        
         currentLogInfo['num_interaction_types'] = intTypeCounter;
         currentLogInfo['num_tuples'] = numScores;
         currentLog['info'] = currentLogInfo;
@@ -2042,13 +2099,23 @@
         var currentLogInfo = {};
         currentLogInfo['score_type'] = scoreType;
 
+        var changeVector = {};
+        
         if (Object.keys(weightVectorSubset).length == 0) {
+        	for (var curKey in attributeValueMap) {
+        		changeVector[curKey] = {};
+        		changeVector[curKey]['old'] = 0.0;
+        		changeVector[curKey]['new'] = 0.0;
+        		changeVector[curKey]['change'] = 0.0;
+        		changeVector[curKey]['metric_level'] = 0.0;
+        	}
+        	currentLogInfo['change_vector'] = changeVector; 
+            currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
             currentLog['info'] = currentLogInfo;
             currentLog['metric_level'] = 0;
             return currentLog;
         }
 
-        var changeVector = {};
         if (scoreType == 'span') {
         	// consider only the oldest and most recent weight vectors
             var firstVector = weightVectorSubset[0].oldWeight;
