@@ -1844,7 +1844,7 @@
         	}
         	
         	for (var curId in aggMap) {
-	        	var score = aggMap[curId] / numLogsCounter;
+	        	var score = aggMap[curId];
 	            if (considerSpan) {
 	
 	            	// find indices of interactions with data item curId
@@ -1862,9 +1862,9 @@
 
 	            	if (occurrenceIndices.length == 1) score = 0;
 	            	// TODO: should this only count if it's more than 1 interaction? 
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, /*'metric_level' : score, */ 'score': score, 'count' : aggMap[curId], 'span' : span};
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'score': score, 'count' : aggMap[curId], 'span' : span};
 	            } else
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, /*'metric_level' : score, */ 'score': score, 'count' : aggMap[curId], 'span' : 1};
+	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'score': score, 'count' : aggMap[curId], 'span' : 1};
 	            avgScore += score; 
 	            numScores++; 
         	}
@@ -1873,10 +1873,8 @@
             
             // compute standard deviation of scores
         	var stdDev = 0;
-        	for (var curId in aggMap) {
-        		//console.log('**** current value: ' + currentLogInfo['repetition_vector'][curId]['score']);
+        	for (var curId in aggMap)
         		stdDev += ((currentLogInfo['repetition_vector'][curId]['score'] - avgScore) * (currentLogInfo['repetition_vector'][curId]['score'] - avgScore));
-        	}
         	stdDev /= numScores; 
             stdDev = Math.sqrt(stdDev);
             currentLogInfo['standard_deviation'] = stdDev;
@@ -1897,7 +1895,7 @@
 	            var curQueue = repetitionMap[eventTypeKey];
 	            for (var curId in curQueue) {
 	                var curKey = eventTypeKey + "," + curId;
-	                var score = repetitionMap[eventTypeKey][curId] / numLogsCounter;
+	                var score = repetitionMap[eventTypeKey][curId];
 	                if (considerSpan) {
 	
 	                	// find indices of when eventTypeKey occurred with data item curId
@@ -1914,9 +1912,9 @@
 		            	score = repetitionMap[eventTypeKey][curId] / span;
 	                	if (occurrenceIndices.length == 1) score = 0;
 	                	// TODO: should this only count if it's more than 1 interaction? 
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, /*'metric_level' : score, */ 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
 	                } else
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, /*'metric_level' : score, */ 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
+	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
 	                avgScore += score; 
 	                numScores++; 
 	            }
