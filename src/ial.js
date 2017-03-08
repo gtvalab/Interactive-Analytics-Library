@@ -11,12 +11,13 @@
      * specialAttributeList is an optional list of one or more attributes
      * condition is either 'includeOnly','exclude'
      * */
-    ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,condition,minWeight,maxWeight) {
+    ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,condition,minimumWeight,maximumWeight) {
         normalizeAttributeWeights = typeof normalizeAttributeWeights !== 'undefined' ? normalizeAttributeWeights : 0;
-        minWeight = typeof minWeight !== 'undefined' ? minWeight : 0;
-        maxWeight = typeof maxWeight !== 'undefined' ? maxWeight : 1;
-        this.minWeight = minWeight;
-        this.maxWeight = maxWeight;
+        minimumWeight = (typeof minimumWeight !== 'undefined' && !isNaN(minimumWeight)) ? minimumWeight : 0;
+        maximumWeight = (typeof maximumWeight !== 'undefined' && !isNaN(maximumWeight)) ? maximumWeight : 1;
+        this.minWeight = Number(minimumWeight);
+        this.maxWeight = Number(maximumWeight);
+        
         specialAttributeList = typeof specialAttributeList !== 'undefined' ? specialAttributeList : [];
         if(specialAttributeList.length>0){
             if(['includeOnly','exclude'].indexOf(condition)==-1){
@@ -72,7 +73,7 @@
                     for (var index in passedData) {
                         this.dataSet[index]["ial"] = {};
                         this.dataSet[index]["ial"]["id"] = index;
-                        this.dataSet[index]["ial"]["weight"] = 0;
+                        this.dataSet[index]["ial"]["weight"] = 1;
                         this.dataSet[index]["ial"]["screen_time"] = 0;
                         this.ialIdToDataMap[index] = this.dataSet[index];
 
@@ -917,14 +918,16 @@
      * Returns an attribute weight vector generated based on similarity between given points
      * */
     ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
+    	var minWeight = this.minWeight;
+    	var maxWeight = this.maxWeight;
 
         // returns maxWeight-result since goal is to find similarity
         var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
-            var a = this.minWeight, b = this.maxWeight;
+            var a = minWeight, b = maxWeight;
             var min = minVariance;
             var max = maxVariance;
 
-            var normalizedValue = this.maxWeight-(((b - a) * (variance - min) / (max - min)) + a);
+            var normalizedValue = b-(((b - a) * (variance - min) / (max - min)) + a);
 
             return normalizedValue;
         };
@@ -969,7 +972,6 @@
             }
         }
         console.log(ial.utils.clone(tempAttributeWeightVector));
-        //console.log(minVariance,maxVariance);
 
         // setting weights as normalized values between minWeight and maxWeight based on variances (final step)
         for(var attribute in this.attributeWeightVector) {
@@ -1169,7 +1171,7 @@
             }
             aggregateScores[index]["ial"]["aggregateScore"] *= dataPoints[index]["ial"]["weight"];
         }
-
+        
         aggregateScores.sort(function(a, b) {
             return b["ial"]["aggregateScore"] - a["ial"]["aggregateScore"];
         });
