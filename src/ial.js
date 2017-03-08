@@ -516,7 +516,6 @@
             this.attributeWeightVector[attribute] = newWeight;
             ial.normalizeAttributeWeightVector(); 
         }
-        ial.updateActiveAttributeCount();
 
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
@@ -558,7 +557,6 @@
             this.attributeWeightVector[attribute] = newWeight;
             ial.normalizeAttributeWeightVector();
         }
-        ial.updateActiveAttributeCount(); 
 
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
@@ -614,19 +612,6 @@
         ial.updateItemScores();
     };
 
-
-    /*
-     * Private function to update active attribute counts based on attribute weight vector
-     * */
-    ial.updateActiveAttributeCount = function () { // TODO: what do we consider "active"? 
-        this.activeAttributeCount = 0;
-        for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]>this.minWeight){
-                this.activeAttributeCount += 1;
-            }
-        }
-    };
-
     /*
      * resets the attributeWeightVector to have all 0s
      * TODO: what should reset actually do? all 0s? all maxWeights? all minWeights?
@@ -655,7 +640,6 @@
             // track attribute weight changes in attributeWeightVectorQueue
             ial.attributeWeightVectorEnqueue(logObj);
         }
-        ial.updateActiveAttributeCount();
 
         if(this.useNormalizedAttributeWeights==1){
             ial.normalizeAttributeWeightVector();
@@ -691,7 +675,6 @@
             ial.attributeWeightVectorEnqueue(logObj);
         }
 
-        ial.updateActiveAttributeCount();
         ial.updateItemScores();
     };
     
