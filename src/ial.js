@@ -5,24 +5,30 @@
     ial = {};
     this.ialIdToDataMap = {};
     this.useNormalizedAttributeWeights;
+    this.maxWeight; 
+    this.minWeight;
     /*
      * specialAttributeList is an optional list of one or more attributes
      * condition is either 'includeOnly','exclude'
      * */
-    ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,condition) {
+    ial.init = function(passedData,normalizeAttributeWeights,specialAttributeList,condition,minWeight,maxWeight) {
         normalizeAttributeWeights = typeof normalizeAttributeWeights !== 'undefined' ? normalizeAttributeWeights : 0;
+        minWeight = typeof minWeight !== 'undefined' ? minWeight : 0;
+        maxWeight = typeof maxWeight !== 'undefined' ? maxWeight : 1;
+        this.minWeight = minWeight;
+        this.maxWeight = maxWeight;
         specialAttributeList = typeof specialAttributeList !== 'undefined' ? specialAttributeList : [];
         if(specialAttributeList.length>0){
             if(['includeOnly','exclude'].indexOf(condition)==-1){
                 throw 'ERROR: condition must be "includeOnly" or "exclude"';
                 return ;
             }
-        }
+        } 
 
         this.attrVector = {};
         this.dataSet = passedData;
         this.clusters = [];
-        this.attributeWeightVector = {}; // map of attributes to weights in range [0,1]
+        this.attributeWeightVector = {}; // map of attributes to weights in range [minWeight,maxWeight]
         this.ialIdToDataMap  = {}; // map from ialId to actual data item
         this.attributeValueMap = {}; // map from attribute name to its data type and summary statistics about it
         this.activeAttributeCount = 0;
@@ -60,13 +66,13 @@
                 }
                 if(shouldConsiderAttribute==1){
                     this.activeAttributeCount += 1;
-                    this.attributeWeightVector[attribute] = 1.0;
+                    this.attributeWeightVector[attribute] = 0;
                     var isCategorical = false;
                     var uniqueVals = new Set();
                     for (var index in passedData) {
                         this.dataSet[index]["ial"] = {};
                         this.dataSet[index]["ial"]["id"] = index;
-                        this.dataSet[index]["ial"]["weight"] = 1;
+                        this.dataSet[index]["ial"]["weight"] = 0;
                         this.dataSet[index]["ial"]["screen_time"] = 0;
                         this.ialIdToDataMap[index] = this.dataSet[index];
 
@@ -272,6 +278,14 @@
         }
         return weightSum;
     };
+    
+    ial.getAttributeVectorAbsoluteSum = function() {
+    	var weightSum = 0.0;
+    	for(var attribute in this.attributeWeightVector){
+    		weightSum += Math.abs(parseFloat(this.attributeWeightVector[attribute]));
+    	}
+    	return weightSum;
+    };
 
 
     /*
@@ -303,13 +317,13 @@
     };
 
     /*
-     * Normalize weight vector
+     * Normalize weight vector 
      * */
     ial.normalizeAttributeWeightVector = function () {
-        var activeSum = 0;
+        var activeSum = 0; // sum of absolute value of attribute weights
         for(var attribute in this.attributeWeightVector){
             if(this.attributeWeightVector[attribute]!=0.0){
-                activeSum += this.attributeWeightVector[attribute];
+                activeSum += Math.abs(this.attributeWeightVector[attribute]);
             }
         }
         for(var attribute in this.attributeWeightVector){
@@ -440,12 +454,12 @@
     };
 
     /*
-     * returns normalized value in [0,1] given an attribute's current value and name
+     * returns normalized value in [minWeight,maxWeight] given an attribute's current value and name
      * ref: http://stackoverflow.com/questions/5294955/how-to-scale-down-a-range-of-numbers-with-a-known-min-and-max-value
      * */
     ial.getNormalizedAttributeValue = function(val,attribute) {
         if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
-            var a = 0, b = 1;
+            var a = this.minWeight, b = this.maxWeight;
             var min = this.attributeValueMap[attribute]['min'];
             var max = this.attributeValueMap[attribute]['max'];
 
@@ -479,7 +493,7 @@
 
 
     /*
-     * sets attribute's weight to newWeight. Checks to ensure that the weight is always in [0.0,1.0]
+     * sets attribute's weight to newWeight. Checks to ensure that the weight is always in [minWeight,maxWeight]
      * */
     ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfoMap){
 
@@ -491,16 +505,16 @@
         logObj.setEventName('AttributeWeightChange_SET');
 
         if(this.useNormalizedAttributeWeights==0) {
-            if (newWeight > 1.0) {
-                this.attributeWeightVector[attribute] = 1.0;
-            } else if (newWeight < 0.0) {
-                this.attributeWeightVector[attribute] = 0.0;
+            if (newWeight > this.maxWeight) {
+                this.attributeWeightVector[attribute] = this.maxWeight;
+            } else if (newWeight < this.minWeight) {
+                this.attributeWeightVector[attribute] = this.minWeight;
             } else {
                 this.attributeWeightVector[attribute] = newWeight;
             }
         }else{
             this.attributeWeightVector[attribute] = newWeight;
-            ial.normalizeAttributeWeightVector();
+            ial.normalizeAttributeWeightVector(); 
         }
         ial.updateActiveAttributeCount();
 
@@ -520,7 +534,7 @@
     };
 
     /*
-     * Increments attribute's weight by increment. Checks to ensure that the weight is always in [0.0,1.0]
+     * Increments attribute's weight by increment. Checks to ensure that the weight is always in [minWeight,maxWeight]
      * */
     ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
@@ -533,11 +547,10 @@
         var newWeight = this.attributeWeightVector[attribute] + increment;
 
         if(this.useNormalizedAttributeWeights==0) {
-            console.log("if");
-            if (newWeight > 1.0) {
-                this.attributeWeightVector[attribute] = 1.0;
-            } else if (newWeight < 0.0) {
-                this.attributeWeightVector[attribute] = 0.0;
+            if (newWeight > this.maxWeight) {
+                this.attributeWeightVector[attribute] = this.maxWeight;
+            } else if (newWeight < this.minWeight) {
+                this.attributeWeightVector[attribute] = this.minWeight;
             } else {
                 this.attributeWeightVector[attribute] = newWeight;
             }
@@ -545,8 +558,7 @@
             this.attributeWeightVector[attribute] = newWeight;
             ial.normalizeAttributeWeightVector();
         }
-        ial.updateActiveAttributeCount();
-
+        ial.updateActiveAttributeCount(); 
 
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
@@ -576,11 +588,11 @@
 
         this.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
         for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]>1.0){
-                this.attributeWeightVector[attribute] = 1.0
+            if(this.attributeWeightVector[attribute]>this.maxWeight){
+                this.attributeWeightVector[attribute] = this.maxWeight;
             }
-            if(this.attributeWeightVector[attribute]<0.0){
-                this.attributeWeightVector[attribute] = 0.0
+            if(this.attributeWeightVector[attribute]<this.minWeight){
+                this.attributeWeightVector[attribute] = this.minWeight;
             }
         }
 
@@ -606,17 +618,18 @@
     /*
      * Private function to update active attribute counts based on attribute weight vector
      * */
-    ial.updateActiveAttributeCount = function () {
+    ial.updateActiveAttributeCount = function () { // TODO: what do we consider "active"? 
         this.activeAttributeCount = 0;
         for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]>0.0){
+            if(this.attributeWeightVector[attribute]>this.minWeight){
                 this.activeAttributeCount += 1;
             }
         }
     };
 
     /*
-     * resets the attributeWeightVector to have all 1.0s
+     * resets the attributeWeightVector to have all 0s
+     * TODO: what should reset actually do? all 0s? all maxWeights? all minWeights?
      * */
     ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
@@ -627,7 +640,7 @@
         logObj.setEventName('AttributeWeightChange_RESET');
 
         for(var attribute in this.attributeWeightVector){
-            this.attributeWeightVector[attribute] = 1.0;
+            this.attributeWeightVector[attribute] = 0.0;
         }
 
 
@@ -652,7 +665,7 @@
     };
 
     /*
-     * Nullifies attributeWeightVector to 0.0s
+     * Nullifies attributeWeightVector to 0s
      * */
     ial.nullifyAttributeWeightVector = function (logEvent, additionalLogInfoMap) {
 
@@ -681,37 +694,7 @@
         ial.updateActiveAttributeCount();
         ial.updateItemScores();
     };
-
-    /*
-     * Nullifies attributeWeightVector to 0.0s
-     * */
-    ial.nullifyAttributeWeights = function (attributes, logEvent, additionalLogInfoMap) {
-
-        logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
-        additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
-
-        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
-        logObj.setEventName('AttributeWeightChange_NULLIFY');
-
-        for(var i = 0; i < attributes.length; i++){
-            ial.setAttributeWeight(attributes[i], 0.0);
-        }
-
-        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
-        if(additionalLogInfoMap!={}){
-            logObj.setCustomLogInfo(additionalLogInfoMap);
-        }
-
-        if(logEvent==true){
-            this.sessionLogs.push(logObj);
-            // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
-        }
-
-        ial.updateActiveAttributeCount();
-        ial.updateItemScores();
-    };
+    
 
     /*
      * Returns top N points based on interaction weight (a.k.a. weight)
@@ -952,22 +935,20 @@
      * */
     ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
 
-        // returns 1-result since goal is to find similarity
+        // returns maxWeight-result since goal is to find similarity
         var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
-            var a = 0.0, b = 1.0;
+            var a = this.minWeight, b = this.maxWeight;
             var min = minVariance;
             var max = maxVariance;
 
-            var normalizedValue = 1-(((b - a) * (variance - min) / (max - min)) + a);
+            var normalizedValue = this.maxWeight-(((b - a) * (variance - min) / (max - min)) + a);
 
             return normalizedValue;
         };
 
-
         var tempAttributeWeightVector = {};
         var attributeValueListMap = {};
-
-
+        
         // creating a map with all values as lists against attributes (first step)
         for(var i in points){
             var d = points[i];
@@ -995,7 +976,7 @@
                 if(tempAttributeWeightVector[attribute]>maxVariance){
                     maxVariance = tempAttributeWeightVector[attribute];
                 }
-            }else{
+            }else{ // TODO: How is this working for categorical variables now? 
                 var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
                 if(uniqueVals.length>1){
                     tempAttributeWeightVector[attribute] = 0;
@@ -1007,7 +988,7 @@
         console.log(ial.utils.clone(tempAttributeWeightVector));
         //console.log(minVariance,maxVariance);
 
-        // setting weights as normalized values between 0 -1 based on variances (final step)
+        // setting weights as normalized values between minWeight and maxWeight based on variances (final step)
         for(var attribute in this.attributeWeightVector) {
             if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
                 var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute],minVariance,maxVariance);
@@ -1145,104 +1126,15 @@
                         }else{
                             difference[attribute] = 1;
                         }
-                    }
+                    } // TODO: how is this working for categorical? 
                 }
             }
 
             tempAttributeWeightVector = difference;
 
         } else {
-            /*
-            // returns result directly since goal is to find similarity
-            var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
-                var a = 0.0, b = 1.0;
-                var min = minVariance;
-                var max = maxVariance;
-
-                var normalizedValue = (((b - a) * (variance - min) / (max - min)) + a);
-
-                return normalizedValue;
-            };
-
-
-            var tempAttributeWeightVector = {};
-            var attributeValueListMap = {};
-
-
-            // creating a map with all values as lists against attributes (first step)
-            for(var i in points1){
-                var d = points1[i];
-                for(var attribute in this.attributeWeightVector){
-                    var val = this.getNormalizedAttributeValue(d[attribute],attribute);
-                    if( attribute in attributeValueListMap){
-                        attributeValueListMap[attribute].push(val);
-                    }else{
-                        attributeValueListMap[attribute] = [];
-                        attributeValueListMap[attribute].push(val);
-                    }
-                }
-            }
-
-            // setting weights as variances (intermediate step)
-            var minVariance = Number.MAX_VALUE,maxVariance = Number.MIN_VALUE;
-            for(var attribute in this.attributeWeightVector){
-                //console.log("==================")
-                if(this.attributeValueMap[attribute]['dataType']!='categorical') {
-                    tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
-                    if(tempAttributeWeightVector[attribute]<minVariance){
-                        minVariance = tempAttributeWeightVector[attribute];
-                    }
-                    if(tempAttributeWeightVector[attribute]>maxVariance){
-                        maxVariance = tempAttributeWeightVector[attribute];
-                    }
-                }else{
-                    var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
-                    if(uniqueVals.length>1){
-                        tempAttributeWeightVector[attribute] = 1;
-                    }else{
-                        tempAttributeWeightVector[attribute] = 0;
-                    }
-                }
-            }
-            //console.log(ial.utils.clone(tempAttributeWeightVector));
-            //console.log(minVariance,maxVariance);
-
-            // setting weights as normalized values between 0 -1 based on variances (final step)
-            for(var attribute in this.attributeWeightVector) {
-                if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
-                    var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute],minVariance,maxVariance);
-
-                    tempAttributeWeightVector[attribute] = normalizedAttributeWeight;
-                }
-            }
-
-            if(this.useNormalizedAttributeWeights==1){
-                tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
-            }
-            */
-
-            tempAttributeWeightVector = ial.generateAttributeWeightVectorUsingSimilarity(points1);
-
-
-            //---------------------------
-            // old difference based logic
-            //---------------------------
-            /*
-             for(var attribute in this.attributeWeightVector){
-             var val1 = this.getNormalizedAttributeValue(points[0][attribute],attribute);
-             var val2 = this.getNormalizedAttributeValue(points[1][attribute],attribute);
-             if(this.attributeValueMap[attribute]['dataType']!='categorical'){
-             var diff = Math.abs(val1-val2);
-             tempAttributeWeightVector[attribute] = diff;
-             }else{
-             if(val1 == val2){
-             tempAttributeWeightVector[attribute] = 0.0;
-             }else{
-             tempAttributeWeightVector[attribute] = 1.0;
-             }
-             }
-             }
-             */
+        	console.log("Error: points undefined.");
+        	return this.attributeWeightVector;
         }
 
         return tempAttributeWeightVector;
@@ -1291,22 +1183,6 @@
                         aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
                     }
                 }
-                //
-                //if (isNaN(attributeValue) && attributeName!='ial') {
-                //    if (Object.keys(tempStringValMap).indexOf(attributeValue) == -1) { // if string not found
-                //        tempStringValMap[attributeValue] = tempStringId;
-                //        attributeValue = tempStringId;
-                //        tempStringId += 10;
-                //    } else {
-                //        attributeValue = tempStringValMap[attributeValue];
-                //    }
-                //}
-                //
-                //if (attributeName != "ial" && isNaN(attributeValue) == false && attributeWeight>0.0) {
-                //    //attributeValue = ial.getNormalizedAttributeValue(attributeValue,attributeName); // Using normalized attribute values for computation
-                //    aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
-                //}
-
             }
             aggregateScores[index]["ial"]["aggregateScore"] *= dataPoints[index]["ial"]["weight"];
         }
