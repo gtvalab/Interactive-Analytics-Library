@@ -39,15 +39,16 @@
         this.attributeWeightVectorQueue = [];
         this.biasLogs = [];
         this.maxQueueSize = 10000;
-        this.BIAS_ATTRIBUTE_WEIGHT = 'bias_attribute_weight';
-        this.BIAS_VARIANCE = 'bias_variance';
-        this.BIAS_SUBSET = 'bias_subset';
-        this.BIAS_REPETITION = 'bias_repetition';
-        this.BIAS_SCREEN_TIME = 'bias_screen_time';
+        this.BIAS_DATA_POINT_COVERAGE = 'bias_data_point_coverage';
+        this.BIAS_DATA_POINT_DISTRIBUTION = 'bias_data_point_distribution';
+        this.BIAS_ATTRIBUTE_COVERAGE = 'bias_attribute_coverage';
+        this.BIAS_ATTRIBUTE_DISTRIBUTION = 'bias_attribute_distribution';
+        this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE = 'bias_attribute_weight_coverage';
+        this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION = 'bias_attribute_weight_distribution';
+        //this.BIAS_SCREEN_TIME = 'bias_screen_time';
         // TODO: update this if more metrics are added
-        this.BIAS_TYPES = [this.BIAS_ATTRIBUTE_WEIGHT, this.BIAS_VARIANCE, this.BIAS_SUBSET, this.BIAS_REPETITION, this.BIAS_SCREEN_TIME]; 
-        this.ATTRIBUTE_SCORES = ['span', 'average', 'min', 'max'];
-
+        this.BIAS_TYPES = [this.BIAS_DATA_POINT_COVERAGE, this.BIAS_DATA_POINT_DISTRIBUTION, this.BIAS_ATTRIBUTE_COVERAGE, this.BIAS_ATTRIBUTE_DISTRIBUTION, this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE, this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION];//this.BIAS_SCREEN_TIME]; 
+        
         // initializing attributeWeightVector and attributeValueMap
         var attributeList = Object.keys(passedData[0]);
         for (var attribute in passedData[0]) {
@@ -118,7 +119,8 @@
         // find mean, min, and max for all attributes
         for (var attribute in this.attributeValueMap) {
             if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
-                var curMean = 0;
+            	var curDistribution = [];
+            	var curMean = 0;
                 var curMin = parseFloat(passedData[0][attribute]);
                 var curMax = parseFloat(passedData[0][attribute]);
                 for (var index in passedData) {
@@ -127,10 +129,13 @@
                     if (curVal < curMin) curMin = curVal;
                     if (curVal > curMax) curMax = curVal;
                     curMean += curVal;
+                    curDistribution.push(curVal);
                 }
+                curDistribution.sort(function(a, b) {return a - b});
                 this.attributeValueMap[attribute]['min'] = curMin;
                 this.attributeValueMap[attribute]['max'] = curMax;
                 this.attributeValueMap[attribute]['mean'] = curMean / passedData.length;
+                this.attributeValueMap[attribute]['distribution'] = curDistribution; 
             } else { // categorical
                 var curDistribution = {};
                 var curMean = passedData[0][attribute];
@@ -1424,6 +1429,57 @@
 
         return interactionSubsetQueues;
     }
+    
+ // private
+ // 'time' can be a Date object; returns all interactions that occurred since 'time'
+ // 'time' can be an integer; returns the last 'time' interactions
+ // interactionTypes defines which types of interactions to consider
+     function getInteractionQueueSubsetByDataPoint(time, interactionTypes) {
+         var interactionSubsetQueues = {};
+         this.interactionQueue = ial.getInteractionQueue(); 
+
+         if (typeof time === 'undefined') time = this.interactionQueue.length;
+
+         if (time instanceof Date) {
+             interactionSubsetQueues = {};
+             for (var i = 0; i < this.interactionQueue.length; i++) {
+                 var curLog = this.interactionQueue[i];
+                 var curTime = curLog.eventTimeStamp;
+                 var curData = curLog.dataItem;
+                 var curEventType = curLog.customLogInfo.eventType;
+                 if (curEventType === 'undefined') curEventType = 'uncategorized';
+                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
+                     var curQueue = [];
+                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
+
+                     curQueue.push(curLog);
+                     interactionSubsetQueues[curData.ial.id] = curQueue;
+                 }
+             }
+         } else if (!isNaN(parseInt(time))) {
+             interactionSubsetQueues = {};
+             if (time > this.interactionQueue.length) time = this.interactionQueue.length;
+             var i = 0;
+             var numLogs = 0;
+             while (i < this.interactionQueue.length && numLogs <= time) {
+                 var curLog = this.interactionQueue[i];
+                 var curData = curLog.dataItem;
+                 var curEventType = curLog.customLogInfo.eventType;
+                 if (curEventType === 'undefined') curEventType = 'uncategorized';
+                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                     var curQueue = [];
+                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
+
+                     curQueue.push(curLog);
+                     interactionSubsetQueues[curData.ial.id] = curQueue;
+                     numLogs++;
+                 }
+                 i++;
+             }
+         }
+
+         return interactionSubsetQueues;
+     }
 
 // private
 // arg can be a Date object; returns all interactions that occurred since 'time'
@@ -1541,44 +1597,51 @@
 
     /*
      * Bias metrics
-     * */
+     */
 
-// compute bias metrics
-// metric (optional) which bias metric to compute (defaults to compute all metrics)
-// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full queue) 
-// interactionTypes (optional) can specify to only compute bias on particular types of interaction (based on eventType key in customLogInfo)
-// considerSpan (optional) considers distance between repeated interactions for repetition metric (defaults to true)
-// scoreType (optional) defines parameter for attribute weight metric (defaults to span)
-// returns true if bias is detected, false otherwise
-    ial.computeBias = function(metric, time, interactionTypes, considerSpan, scoreType) {
-    	var aggregate = true;
-        if (typeof metric !== 'undefined') {
-            if (metric == this.BIAS_ATTRIBUTE_WEIGHT) return ial.computeAttributeWeightBias(time, scoreType);
-            else if (metric == this.BIAS_REPETITION) return ial.computeRepetitionBias(time, interactionTypes, aggregate, considerSpan);
-            else if (metric == this.BIAS_SUBSET) return ial.computeSubsetBias(time, interactionTypes);
-            else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
-            else return ial.computeVarianceBias(time, interactionTypes);
+	// compute bias metrics
+	// metric (optional) which bias metric to compute (defaults to compute all metrics)
+	// time (optional) can be given as a Date object or a number representing the number of previous interactions to consider (default is to consider the full queue) 
+	// interactionTypes (optional) can specify to only compute bias on particular types of interaction (based on eventType key in customLogInfo)
+    // numQuantiles (optional) number of quantiles to divide numerical attributes into (default is 4)
+	// returns true if bias is detected, false otherwise
+    ial.computeBias = function(metric, time, interactionTypes) {
+    	if (typeof metric !== 'undefined') {
+        	if (metric == this.BIAS_DATA_POINT_COVERAGE) return ial.computeDataPointCoverage(time, interactionTypes);
+        	else if (metric == this.BIAS_DATA_POINT_DISTRIBUTION) return ial.computeDataPointDistribution(time, interactionTypes);
+        	else if (metric == this.BIAS_ATTRIBUTE_COVERAGE) return ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
+        	else if (metric == this.BIAS_ATTRIBUTE_DISTRIBUTION) return ial.computeAttributeDistribution(time, interactionTypes, numQuantiles);
+        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE) return ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
+        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION) return ial.computeAttributeWeightDistribution(time, interactionTypes, numQuantiles);
+        	// else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
+        	else return ial.computeDataPointCoverage(time, interactionTypes);
         } else {
             var numMetrics = this.BIAS_TYPES.length;
             var biasResultMap = {};
-            var attributeWeightBias = ial.computeAttributeWeightBias(time, scoreType);
-            var repetitionBias = ial.computeRepetitionBias(time, interactionTypes, aggregate, considerSpan);
-            var subsetBias = ial.computeSubsetBias(time, interactionTypes);
-            var varianceBias = ial.computeVarianceBias(time, interactionTypes);
-            var screenTimeBias = ial.computeScreenTimeBias();
+            var dataPointCoverage = ial.computeDataPointCoverage(time, interactionTypes);
+            var dataPointDistribution = ial.computeDataPointDistribution(time, interactionTypes);
+            var attributeCoverage = ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
+            var attributeDistribution = ial.computeAttributeDistribution(time, interactionTypes, numQuantiles);
+            var attributeWeightCoverage = ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
+            var attributeWeightDistribution = ial.computeAttributeWeightDistribution(time, interactionTypes, numQuantiles);
+            //var screenTimeBias = ial.computeScreenTimeBias();
             
-            biasResultMap['attribute_weight_metric'] = attributeWeightBias;
-            biasResultMap['repetition_metric'] = repetitionBias;
-            biasResultMap['subset_metric'] = subsetBias;
-            biasResultMap['variance_metric'] = varianceBias;
-            biasResultMap['screen_time_metric'] = screenTimeBias;
+            biasResultMap['data_point_coverage'] = dataPointCoverage;
+            biasResultMap['data_point_distribution'] = dataPointDistribution;
+            biasResultMap['attribute_coverage'] = attributeCoverage;
+            biasResultMap['attribute_distribution'] = attributeDistribution;
+            biasResultMap['attribute_weight_coverage'] = attributeWeightCoverage;
+            biasResultMap['attribute_weight_distribution'] = attributeWeightDistribution;
+            //biasResultMap['screen_time_metric'] = screenTimeBias;
 
             var avgLevel = 0;
-            avgLevel += parseFloat(attributeWeightBias['metric_level']);
-            avgLevel += parseFloat(repetitionBias['metric_level']);
-            avgLevel += parseFloat(subsetBias['metric_level']);
-            avgLevel += parseFloat(varianceBias['metric_level']);
-            avgLevel += parseFloat(screenTimeBias['metric_level']);
+            avgLevel += parseFloat(dataPointCoverage['metric_level']);
+            avgLevel += parseFloat(dataPointDistribution['metric_level']);
+            avgLevel += parseFloat(attributeCoverage['metric_level']);
+            avgLevel += parseFloat(attributeDistribution['metric_level']);
+            avgLevel += parseFloat(attributeWeightCoverage['metric_level']);
+            avgLevel += parseFloat(attributeWeightDistribution['metric_level']);
+            //avgLevel += parseFloat(screenTimeBias['metric_level']);
             avgLevel /= numMetrics;
             biasResultMap['metric_level'] = avgLevel;
 
@@ -1586,250 +1649,307 @@
         }
     }
 
-// the subset bias metric relates to the percentage of interactions that were with unique data items
-// metric = 1 - (# unique data items interacted with) / (max # interactions) 
-// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
-// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeSubsetBias = function(time, interactionTypes) {
+    
+    
+	// the data point coverage metric relates to the percentage of interactions that were with unique data items
+	// metric = 1 - min[1, (# unique data items interacted with) / (expected # unique data points interacted with)]
+	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+    ial.computeDataPointCoverage = function(time, interactionTypes) {
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
-        currentLog['bias_type'] = this.BIAS_SUBSET;
+        currentLog['bias_type'] = this.BIAS_DATA_POINT_COVERAGE;
         currentLog['current_time'] = new Date();
         currentLog['number_of_logs'] = interactionSubset.length;
+        currentLog['interaction_types'] = interactionTypes;
+        currentLog['time_window'] = time;
         var currentLogInfo = {};
-        currentLogInfo['interaction_types'] = interactionTypes;
-
-        var maxInteractions = Math.min(interactionSubset.length, this.dataSet.length);
 
         // figure out how many interactions were with unique data items
         var idSet = new Set();
         for (var i = 0; i < interactionSubset.length; i++)
             idSet.add(interactionSubset[i].dataItem.ial.id);
+        
+        // compute expected number of unique data items based on total # of interactions
+        var expectedUnique = ial.utils.getMarkovExpectedValue(this.dataSet.length, interactionSubset.length);
 
-        var percentUnique = idSet.size / maxInteractions;
+        var percentUnique = idSet.size / expectedUnique;
 
         currentLogInfo['visited'] = idSet;
-        currentLogInfo['max_interactions'] = maxInteractions;
-        currentLogInfo['unique_data'] = idSet.size;
+        currentLogInfo['covered_data'] = idSet.size;
+        currentLogInfo['expected_covered_data'] = expectedUnique;
         if (interactionSubset.length == 0) // 100% unique if no interactions
         	percentUnique = 1;
         currentLogInfo['percentage'] = percentUnique;
         currentLog['info'] = currentLogInfo;
         
         // lower percent of unique interactions -> higher level of bias
-        currentLog['metric_level'] = 1.0 - percentUnique;
+        currentLog['metric_level'] = 1.0 - Math.min(1, percentUnique);
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
 
-// the repetition metric relates to the number of times a particular data item has been interacted with
-// metric(t, n) = 1- p, where p is defined as the probability of the Z-statistic (number of standard deviations from the mean)
-// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
-// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-// aggregate (optional) aggregates all interaction types for each data item
-// considerSpan = true lowers contributing score of repetitions by scaling according to how spread out the interactions are
-//   interactions are weighted: 
-//     if considerSpan: score = (number of occurrences / total number of interactions) * (average span of occurrences)
-//     else: number of occurrences / total number of interactions
-// TODO: considerSpan option seems to produce unexpected results    
-    ial.computeRepetitionBias = function(time, interactionTypes, aggregate, considerSpan) {
-    	// TODO: considerSpan option doesn't seem to be computing values as expected
-        // TODO: choose a different statistical test that doesn't assume normality
-    	if (typeof considerSpan === 'undefined' || (considerSpan != true && considerSpan != false)) considerSpan = false;
-        if (typeof aggregate === 'undefined' || (aggregate != true && aggregate != false)) aggregate = true;
-        var interactionSubset = getInteractionQueueSubsetByEventType(time, interactionTypes);
-        var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
+	// the data point distribution metric relates to the number of times a particular data point has been interacted with compared to the expected number of interactions with each data point
+	// metric = 1 - p, where p is defined as the probability of the Chi^2-statistic, and Chi^2 = (observed - expected)^2 / expected
+	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+	ial.computeDataPointDistribution = function(time, interactionTypes) {
+    	var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
+        var interactionSubsetByData = getInteractionQueueSubsetByDataPoint(time, interactionTypes);
 
         var currentLog = {};
         var curDate = new Date();
-        currentLog['bias_type'] = this.BIAS_REPETITION;
+        currentLog['bias_type'] = this.BIAS_DATA_POINT_DISTRIBUTION;
         currentLog['current_time'] = new Date();
+        currentLog['number_of_logs'] = origInteractionSubset.length;
+        currentLog['interaction_types'] = interactionTypes;
+        currentLog['time_window'] = time;
         var currentLogInfo = {};
-        currentLogInfo['interaction_types'] = interactionTypes;
-        currentLogInfo['aggregate'] = aggregate;
-        currentLogInfo['consider_span'] = considerSpan;
-        currentLogInfo['repetition_vector'] = {};
+        currentLogInfo['distribution_vector'] = {};
         
-        if (Object.keys(interactionSubset).length == 0) { // 0 if no interactions
+        // 0 if no interactions
+        if (Object.keys(origInteractionSubset).length == 0) {
         	currentLog['info'] = currentLogInfo;
         	currentLog['number_of_logs'] = 0;
         	currentLog['metric_level'] = 0;
         	return currentLog;
         }
-
-        // create a map to track # of occurrences of each (interaction, data item) tuple
-        var repetitionMap = {};
-        var numLogsCounter = 0;
-        var intTypeCounter = 0;
-        for (var eventTypeKey in interactionSubset) {
-            var curQueue = interactionSubset[eventTypeKey];
-            for (var i = 0; i < curQueue.length; i++) {
-                numLogsCounter++;
-                var curId = curQueue[i].dataItem.ial.id;
-                if (repetitionMap.hasOwnProperty(eventTypeKey)) {
-                    var curObj = repetitionMap[eventTypeKey];
-                    if (curObj.hasOwnProperty(curId)) repetitionMap[eventTypeKey][curId]++;
-                    else {
-                        repetitionMap[eventTypeKey][curId] = 1;
-                        intTypeCounter++;
-                    }
-                } else {
-                	repetitionMap[eventTypeKey] = {};
-                    repetitionMap[eventTypeKey][curId] = 1; 
-                    intTypeCounter++;
-                }
-            }
-        }
-        currentLog['number_of_logs'] = numLogsCounter;
-
-        var avgLevel = 0; 
-        var avgScore = 0; 
-        var numScores = 0; 
         
-        // aggregate all of the scores across all interaction types
-        if (aggregate) {
-        	var aggMap = {};
-        	// aggregate the interaction types in a new dictionary
-        	for (var eventTypeKey in repetitionMap) {
-	            var curQueue = repetitionMap[eventTypeKey];
-	            for (var curId in curQueue) {
-	            	if (aggMap.hasOwnProperty(curId)) {
-	            		aggMap[curId] += repetitionMap[eventTypeKey][curId];
-	            	} else {
-	            		aggMap[curId] = {};
-	            		aggMap[curId] = repetitionMap[eventTypeKey][curId];
-	            	}
-	            }
-        	}
+        console.log(interactionSubsetByData);
+        // compare observed and expected number of interactions for each data point
+        var maxDiff = 0; 
+        var minDiff = 0;
+        var expected = origInteractionSubset.length / this.dataSet.length;
+        var chiSq = 0;
+        for (var i = 0; i < this.dataSet.length; i++) {
+        	var curData = this.dataSet[i];
+        	var observed = 0; 
+        	if (interactionSubsetByData.hasOwnProperty(curData.ial.id))
+        		observed = interactionSubsetByData[curData.ial.id].length;
+        	var diff = observed - expected;
+        	if (diff > maxDiff) maxDiff = diff; 
+        	if (diff < minDiff) minDiff = diff;
+        	currentLogInfo['distribution_vector'][curData.ial.id] = { 'data_item': curData.ial.id, 'observed': observed, 'expected': expected, 'diff': diff };
+        	chiSq += Math.pow((observed - expected), 2) / expected;
+        }
         	
-        	for (var curId in aggMap) {
-	        	var score = aggMap[curId];
-	            if (considerSpan) {
-	
-	            	// find indices of interactions with data item curId
-	            	var occurrenceIndices = [];
-	            	for (var j = 0; j < origInteractionSubset.length; j++) {
-	            		var curObj = origInteractionSubset[j];
-	            		if (curObj.dataItem.ial.id == curId) {
-	            			occurrenceIndices.push(j);
-	            			if (occurrenceIndices.length == aggMap[curId]) break;
-	            		}
-	            	}
-	
-	            	var span = (Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + occurrenceIndices.length - 1) / (occurrenceIndices.length - 1);
-	            	score = aggMap[curId] / span;
-
-	            	if (occurrenceIndices.length == 1) score = 0;
-	            	// TODO: should this only count if it's more than 1 interaction? 
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'score': score, 'count' : aggMap[curId], 'span' : span};
-	            } else
-	            	currentLogInfo['repetition_vector'][curId] = {'data_item': curId, 'score': score, 'count' : aggMap[curId], 'span' : 1};
-	            avgScore += score; 
-	            numScores++; 
-        	}
-        	avgScore /= numScores;
-            currentLogInfo['average_score'] = avgScore;
-            
-            // compute standard deviation of scores
-        	var stdDev = 0;
-        	for (var curId in aggMap)
-        		stdDev += ((currentLogInfo['repetition_vector'][curId]['score'] - avgScore) * (currentLogInfo['repetition_vector'][curId]['score'] - avgScore));
-        	stdDev /= numScores; 
-            stdDev = Math.sqrt(stdDev);
-            currentLogInfo['standard_deviation'] = stdDev;
-            
-            // compute z-scores and probabilities
-            for (var curId in aggMap) {
-            	var zScore = (currentLogInfo['repetition_vector'][curId]['score'] - avgScore) / stdDev;
-            	if (stdDev == 0) zScore = -10; // can't divide by 0, force metric value to 0
-           	 	currentLogInfo['repetition_vector'][curId]['z_score'] = zScore;
-           	 	var prob = getZPercent(zScore); 
-           	 	currentLogInfo['repetition_vector'][curId]['metric_level'] = prob; 
-           	 	avgLevel += prob; 
-            }
-            avgLevel /= numScores;
-            
-        } else {
-	        for (var eventTypeKey in repetitionMap) {
-	            var curQueue = repetitionMap[eventTypeKey];
-	            for (var curId in curQueue) {
-	                var curKey = eventTypeKey + "," + curId;
-	                var score = repetitionMap[eventTypeKey][curId];
-	                if (considerSpan) {
-	
-	                	// find indices of when eventTypeKey occurred with data item curId
-	                	var occurrenceIndices = [];
-	                	for (var j = 0; j < origInteractionSubset.length; j++) {
-	                		var curObj = origInteractionSubset[j];
-	                		if (curObj.dataItem.ial.id == curId && curObj['customLogInfo'].hasOwnProperty('eventType') && curObj['customLogInfo']['eventType'] == eventTypeKey) {
-	                			occurrenceIndices.push(j);
-	                			if (occurrenceIndices.length == repetitionMap[eventTypeKey][curId]) break;
-	                		}
-	                	}
-	
-	                	var span = (Math.abs(occurrenceIndices[occurrenceIndices.length - 1] - occurrenceIndices[0]) + occurrenceIndices.length - 1) / (occurrenceIndices.length - 1);
-		            	score = repetitionMap[eventTypeKey][curId] / span;
-	                	if (occurrenceIndices.length == 1) score = 0;
-	                	// TODO: should this only count if it's more than 1 interaction? 
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : span};
-	                } else
-	                	currentLogInfo['repetition_vector'][curKey] = {'data_item': curId, 'interaction_type': eventTypeKey, 'score': score, 'count' : repetitionMap[eventTypeKey][curId], 'span' : 1};
-	                avgScore += score; 
-	                numScores++; 
-	            }
-	        }
-	        avgScore /= numScores;
-	        currentLogInfo['average_score'] = avgScore;
-	        
-	        // compute standard deviation of scores
-        	var stdDev = 0;
-        	for (var eventTypeKey in repetitionMap) {
-	            var curQueue = repetitionMap[eventTypeKey];
-	            for (var curId in curQueue) {
-	                var curKey = eventTypeKey + "," + curId;
-	                stdDev += ((currentLogInfo['repetition_vector'][curKey]['score'] - avgScore) * (currentLogInfo['repetition_vector'][curKey]['score'] - avgScore));
-	            }
-        	}
-        	stdDev /= numScores; 
-            stdDev = Math.sqrt(stdDev);
-            currentLogInfo['standard_deviation'] = stdDev;
-            
-            // compute z-scores and probabilities
-            for (var eventTypeKey in repetitionMap) {
-	            var curQueue = repetitionMap[eventTypeKey];
-	            for (var curId in curQueue) {
-	                var curKey = eventTypeKey + "," + curId;
-	            	var zScore = (currentLogInfo['repetition_vector'][curKey]['score'] - avgScore) / stdDev;
-	            	if (stdDev == 0) zScore = -10; // can't divide by 0, force metric value to 0
-	           	 	currentLogInfo['repetition_vector'][curKey]['z_score'] = zScore;
-	           	 	var prob = getZPercent(zScore); 
-	           	 	currentLogInfo['repetition_vector'][curKey]['metric_level'] = prob; 
-	           	 	avgLevel += prob; 
-	            }
-            }
-            avgLevel /= numScores;
-        }
-        
-        currentLogInfo['num_interaction_types'] = intTypeCounter;
-        currentLogInfo['num_tuples'] = numScores;
+        var degFree = origInteractionSubset.length - 1;
+        var prob = getChiSquarePercent(chiSq, degFree);
+        currentLogInfo['chi_squared'] = chiSq;
+        currentLogInfo['degrees_of_freedom'] = degFree;
         currentLog['info'] = currentLogInfo;
-        // metric level in this case represents the average metric level across all (interaction, data item) tuples
-        currentLog['metric_level'] = avgLevel;
+        currentLog['metric_level'] = prob;
 
         this.biasLogs.push(currentLog);
         return currentLog;
     }
+	
+	// the attribute coverage metric relates to the percentage of quantiles for each attribute covered by user interactions
+	// metric(a_m) = 1 - min[1, (# unique quantiles interacted with) / (expected # unique quantiles interacted with)]
+	// uses quantiles for numerical attributes and potential attribute values for categorical; a value x falls in quantile i if q_i-1 < x <= q_i
+	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+	// numQuantiles (optional) number of quantiles to divide numerical attributes into
+    ial.computeAttributeCoverage = function(time, interactionTypes, numQuantiles) {
+    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
+    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
-// the variance metric relates to the variance of the data interacted with compared to the variance of the dataset as a whole
-// metric(a_m) = 1 - p, where p is defined as the F statistic (numerical attributes) or the Chi^2 statistic (categorical attributes) for attribute a_m
-// F = var(D_U(a_m)) / var(D(a_m), where D_U is the data the user has interacted with
-// CHI^2 = SUM(O(a_m,k) - E(a_m,k))^2 / E(a_m,k), 
-//    where O is the observed number of data points interacted with that have value k for attribute a_m 
-//    and E is the expected number of data points interacted with that have value k for attribute a_m
-// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
-// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+    	var currentLog = {};
+    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+    	currentLog['current_time'] = new Date();
+    	currentLog['number_of_logs'] = interactionSubset.length;
+    	currentLog['interaction_types'] = interactionTypes;
+    	currentLog['time_window'] = time;
+    	var currentLogInfo = {};
+    	currentLogInfo['attribute_vector'] = {};
+
+    	// compare interactions to quantiles
+    	var maxMetricValue = 0; 
+    	for (var attribute in this.attributeValueMap) {
+    		fullDist = this.attributeValueMap[attribute]['distribution'];
+    		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+    			var quantiles = {};
+    			var quantileList = [];
+    			for (var i = 0; i < numQuantiles; i++) {
+    				if (i != numQuantiles - 1)
+    					quantVal = fullDist[Math.floor((i + 1) * this.dataSet.length / numQuantiles) - 1];
+    				else
+    					quantVal = fullDist[fullDist.length - 1];
+    				quantileList.push(quantVal);
+    				quantiles[quantVal] = 0;
+    			}
+    	
+    			// figure out distribution of interactions
+    			for (var i = 0; i < interactionSubset.length; i++) {
+    				var curVal = interactionSubset[i]['dataItem'][attribute];
+    				
+    				// figure out which quantile it belongs to
+    				for (var j = 0; j < quantileList.length; j++) {
+    					var quantVal = quantileList[j];
+    					if (j == 0) {
+    						if (curVal <= quantVal) 
+    							quantiles[quantVal] += 1;
+    					} else {
+    						if (curVal <= quantVal && curVal > quantileList[j - 1]) 
+    							quantiles[quantVal] += 1;
+    					}
+    				}
+    			}
+    		
+    			currentLogInfo['attribute_vector'][attribute] = {};
+    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
+    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
+    			var coveredQuantiles = 0; 
+    			for (var i = 0; i < quantileList.length; i++) {
+    				var quantVal = quantileList[i];
+    				if (quantiles[quantVal] > 0) {
+    					coveredQuantiles ++; 
+    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
+    				} else 
+    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
+    			}
+
+    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(numQuantiles, interactionSubset.length);
+    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
+    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = numQuantiles; 
+    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
+    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
+    			if (interactionSubset.length == 0) // 100% unique if no interactions
+    				percentUnique = 1;
+    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
+    			// lower percent of unique interactions -> higher level of bias
+    			var metricVal = 1.0 - Math.min(1, percentUnique);
+    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
+    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
+    		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+    			var quantiles = {};
+    			var quantileList = Object.keys(fullDist);
+    	
+    			// figure out distribution of interactions
+    			for (var i = 0; i < interactionSubset.length; i++) {
+    				var attrVal = interactionSubset[i]['dataItem'][attribute];
+    				if (quantiles.hasOwnProperty(attrVal))
+    					quantiles[attrVal] += 1;
+    				else quantiles[attrVal] = 1;
+    			}
+    			
+    			currentLogInfo['attribute_vector'][attribute] = {};
+    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
+    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
+    			var coveredQuantiles = 0; 
+    			for (var i = 0; i < quantileList.length; i++) {
+    				var quantVal = quantileList[i];
+    				if (quantiles.hasOwnProperty(quantVal) && quantiles[quantVal] > 0) {
+    					coveredQuantiles ++; 
+    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
+    				} else 
+    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
+    			}
+
+    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(quantileList.length, interactionSubset.length);
+    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
+    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = quantileList.length; 
+    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
+    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
+    			if (interactionSubset.length == 0) // 100% unique if no interactions
+    				percentUnique = 1;
+    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
+    			// lower percent of unique interactions -> higher level of bias
+    			var metricVal = 1.0 - Math.min(1, percentUnique);
+    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
+    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
+    		}
+    	}
+
+    	currentLog['info'] = currentLogInfo;
+    	// in this case, the metric level is the max metric value over all the attributes
+    	currentLog['metric_level'] = maxMetricValue;
+
+    	this.biasLogs.push(currentLog);
+    	return currentLog;
+    }
+    
+	// the attribute distribution metric relates to the shape of each attribute in the full distribution and in the distribution based on user interactions 
+	// metric(a_m) = 1 - p, where p is defined as the probability of the Chi^2-statistic (categorial) or the KS-statistic (numerical)
+    // Chi^2 = (observed - expected)^2 / expected
+    // KS = largest difference in observed and expected curves
+    // uses quantiles for numerical attributes and potential attribute values for categorical
+	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
+	// numQuantiles (optional) number of quantiles to divide numerical attributes into
+    ial.computeAttributeDistribution = function(time, interactionTypes, numQuantiles) {
+    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
+        var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
+
+        var currentLog = {};
+        currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+        currentLog['current_time'] = new Date();
+        currentLog['number_of_logs'] = interactionSubset.length;
+        currentLog['interaction_types'] = interactionTypes;
+        currentLog['time_window'] = time;
+        var currentLogInfo = {};
+        currentLogInfo['number_of_quantiles'] = numQuantiles;
+        
+        // compare interaction counts with quantized  // emily
+        for (var attribute in this.attributeValueMap) {
+        	fullDist = this.attributeValueMap[attribute]['distribution'];
+        	console.log("distribution:", attribute, this.attributeValueMap[attribute]['distribution']);
+            if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+            	var intDist = [];
+            	for (var i = 0; i < interactionSubset.length; i++)
+            		intDist.push(interactionSubset[i]['dataItem'][attribute]);
+            	intDist.sort();
+            	console.log("   interaction distribution: ", intDist);
+            	for (var i = 0; i < (numQuantiles - 1); i++) {
+            		
+            	}
+            } else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+            	var intDist = {};
+            	for (var i = 0; i < interactionSubset.length; i++) {
+            		var attrVal = interactionSubset[i]['dataItem'][attribute];
+            		if (intDist.hasOwnProperty(attrVal))
+            			intDist[attrVal] += 1;
+            		else intDist[attrVal] = 1;
+            	}
+            	console.log("   interaction distribution: ", intDist);
+            }
+        }
+
+        // figure out how many interactions were with unique data items
+        /*var idSet = new Set();
+        for (var i = 0; i < interactionSubset.length; i++)
+            idSet.add(interactionSubset[i].dataItem.ial.id);
+        
+        // compute expected number of unique data items based on total # of interactions
+        var expectedUnique = ial.utils.getMarkovExpectedValue(this.dataSet.length, interactionSubset.length);
+
+        var percentUnique = idSet.size / expectedUnique;
+
+        currentLogInfo['visited'] = idSet;
+        currentLogInfo['unique_data'] = idSet.size;
+        currentLogInfo['expected_unique_data'] = expectedUnique;
+        if (interactionSubset.length == 0) // 100% unique if no interactions
+        	percentUnique = 1;
+        currentLogInfo['percentage'] = percentUnique;
+        currentLog['info'] = currentLogInfo;
+        
+        // lower percent of unique interactions -> higher level of bias
+        currentLog['metric_level'] = 1.0 - Math.min(1, percentUnique);
+
+        this.biasLogs.push(currentLog);*/
+        return currentLog;
+    }
+
+	// the variance metric relates to the variance of the data interacted with compared to the variance of the dataset as a whole
+	// metric(a_m) = 1 - p, where p is defined as the F statistic (numerical attributes) or the Chi^2 statistic (categorical attributes) for attribute a_m
+	// F = var(D_U(a_m)) / var(D(a_m), where D_U is the data the user has interacted with
+	// CHI^2 = SUM(O(a_m,k) - E(a_m,k))^2 / E(a_m,k), 
+	//    where O is the observed number of data points interacted with that have value k for attribute a_m 
+	//    and E is the expected number of data points interacted with that have value k for attribute a_m
+	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
+	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
     ial.computeVarianceBias = function(time, interactionTypes) {
         var attributeValueMap = ial.getAttributeValueMap();
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
@@ -2142,6 +2262,9 @@
         return logRes;
     }
 
+    /*
+     * Clone an object
+     */
     ial.utils.clone = function(obj) {
         // Handle the 3 simple types, and null or undefined
         if (null == obj || "object" != typeof obj) return obj;
@@ -2172,6 +2295,16 @@
         }
 
         throw new Error("Unable to copy obj! Its type isn't supported.");
+    }
+    
+    /*
+     * Returns the expected number of unique items visited in k 
+     * interactions for a set of size N
+     */
+    ial.utils.getMarkovExpectedValue = function(N, k) {
+    	var num = Math.pow(N, k) - Math.pow((N-1), k);
+    	var denom = Math.pow(N, (k-1));
+    	return num / denom; 
     }
 
 // private

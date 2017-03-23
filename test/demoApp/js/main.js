@@ -700,35 +700,51 @@
         main.drawPCA(params.width,params.height);
     });
 
-    $("#computeSubsetBias").click(function(ev){
-        var biasResult = ial.computeSubsetBias(); 
+    $("#computeDataPointCoverage").click(function(ev){
+        var biasResult = ial.computeDataPointCoverage(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Subset Metric:</b> " + biasResult['metric_level']);
-        console.log("Subset Bias Metric Result");
+        $("#biasResultsDiv").append("<b>Data Point Coverage Metric:</b> " + biasResult['metric_level']);
+        console.log("Data Point Coverage Metric Result");
         console.log(biasResult);
     });
 
-    $("#computeVarianceBias").click(function(ev){
-        var biasResult = ial.computeVarianceBias(); 
+    $("#computeDataPointDistribution").click(function(ev){
+        var biasResult = ial.computeDataPointDistribution(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Variance Metric:</b> " + biasResult['metric_level']);
-        console.log("Variance Bias Metric Result");
+        $("#biasResultsDiv").append("<b>Data Point Distribution Metric:</b> " + biasResult['metric_level']);
+        console.log("Data Point Distribution Metric Result");
+        console.log(biasResult);
+    });
+    
+    $("#computeAttributeCoverage").click(function(ev){
+        var biasResult = ial.computeAttributeCoverage(); 
+        $("#biasResultsDiv").html("");
+        $("#biasResultsDiv").append("<b>Attribute Coverage Metric:</b> " + biasResult['metric_level']);
+        console.log("Attribute Coverage Metric Result");
         console.log(biasResult);
     });
 
-    $("#computeRepetitionBias").click(function(ev){
-        var biasResult = ial.computeRepetitionBias(); 
+    $("#computeAttributeDistribution").click(function(ev){
+        var biasResult = ial.computeAttributeDistribution(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Repetition Metric:</b> " + biasResult['metric_level']);
-        console.log("Repetition Bias Metric Result");
+        $("#biasResultsDiv").append("<b>Attribute Distribution Metric:</b> " + biasResult['metric_level']);
+        console.log("Attribute Distribution Metric Result");
+        console.log(biasResult);
+    });
+    
+    $("#computeAttributeWeightCoverage").click(function(ev){
+        var biasResult = ial.computeAttributeWeightCoverage(); 
+        $("#biasResultsDiv").html("");
+        $("#biasResultsDiv").append("<b>Attribute Weight Coverage Metric:</b> " + biasResult['metric_level']);
+        console.log("Attribute Weight Coverage Metric Result");
         console.log(biasResult);
     });
 
-    $("#computeAttributeWeightBias").click(function(ev){
-        var biasResult = ial.computeAttributeWeightBias(); 
+    $("#computeAttributeWeightDistribution").click(function(ev){
+        var biasResult = ial.computeAttributeWeightDistribution(); 
         $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Attribute Weight Metric:</b> " + biasResult['metric_level']);
-        console.log("Attribute Weight Bias Metric Result");
+        $("#biasResultsDiv").append("<b>Attribute Weight Distribution Metric:</b> " + biasResult['metric_level']);
+        console.log("Attribute Weight Distribution Metric Result");
         console.log(biasResult);
     });
     
