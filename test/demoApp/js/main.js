@@ -81,7 +81,7 @@
     };
 
     main.initializeVis = function(width, height){
-    console.log(ial.getAttributeValueMap()); 
+    	console.log(ial.getAttributeValueMap()); 
         var margin = {top: 40, right: 20, bottom: 20, left: 40},
             width = width - margin.left - margin.right,
             height = height - margin.top - margin.bottom;

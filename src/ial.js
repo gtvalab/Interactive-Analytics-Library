@@ -3,6 +3,7 @@
  */
 (function() {
     ial = {};
+    // emily: remove this; var stats = require('./lib/jerzy/jerzy');
     this.ialIdToDataMap = {};
     this.useNormalizedAttributeWeights;
     this.maxWeight; 
@@ -1711,6 +1712,7 @@
         
         // 0 if no interactions
         if (Object.keys(origInteractionSubset).length == 0) {
+        	currentLogInfo['max_observed_interactions'] = 1;
         	currentLog['info'] = currentLogInfo;
         	currentLog['number_of_logs'] = 0;
         	currentLog['metric_level'] = 0;
@@ -1719,8 +1721,7 @@
         
         console.log(interactionSubsetByData);
         // compare observed and expected number of interactions for each data point
-        var maxDiff = 0; 
-        var minDiff = 0;
+        var maxObs = 0; 
         var expected = origInteractionSubset.length / this.dataSet.length;
         var chiSq = 0;
         for (var i = 0; i < this.dataSet.length; i++) {
@@ -1729,8 +1730,7 @@
         	if (interactionSubsetByData.hasOwnProperty(curData.ial.id))
         		observed = interactionSubsetByData[curData.ial.id].length;
         	var diff = observed - expected;
-        	if (diff > maxDiff) maxDiff = diff; 
-        	if (diff < minDiff) minDiff = diff;
+        	if (observed > maxObs) maxObs = observed; 
         	currentLogInfo['distribution_vector'][curData.ial.id] = { 'data_item': curData.ial.id, 'observed': observed, 'expected': expected, 'diff': diff };
         	chiSq += Math.pow((observed - expected), 2) / expected;
         }
@@ -1739,6 +1739,7 @@
         var prob = getChiSquarePercent(chiSq, degFree);
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
+        currentLogInfo['max_observed_interactions'] = maxObs;
         currentLog['info'] = currentLogInfo;
         currentLog['metric_level'] = prob;
 
@@ -1786,16 +1787,8 @@
     				var curVal = interactionSubset[i]['dataItem'][attribute];
     				
     				// figure out which quantile it belongs to
-    				for (var j = 0; j < quantileList.length; j++) {
-    					var quantVal = quantileList[j];
-    					if (j == 0) {
-    						if (curVal <= quantVal) 
-    							quantiles[quantVal] += 1;
-    					} else {
-    						if (curVal <= quantVal && curVal > quantileList[j - 1]) 
-    							quantiles[quantVal] += 1;
-    					}
-    				}
+    				var whichQuantile = ial.utils.getQuantile(quantileList, curVal);
+    				quantiles[whichQuantile] += 1;
     			}
     		
     			currentLogInfo['attribute_vector'][attribute] = {};
@@ -1878,13 +1871,14 @@
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	// numQuantiles (optional) number of quantiles to divide numerical attributes into
-    ial.computeAttributeDistribution = function(time, interactionTypes) {
-    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
-
+    ial.computeAttributeDistribution = function(time, interactionTypes, numQuantiles) {
     	// TODO: THIS IS JUST COPY/PASTED FROM ATTRIBUTE COVERAGE FOR NOW -- FILL IT IN!
 
+    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
+    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
+
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_DISTRIBUTION;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = interactionSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -1998,124 +1992,106 @@
     	return currentLog;
     }
     
-	// the attribute weight coverage metric relates to the percentage of quantiles for each attribute covered by user interactions
+	// the attribute weight coverage metric relates to the percentage of quantiles for each attribute weight covered by user interactions
 	// metric(a_m) = 1 - min[1, (# unique quantiles interacted with) / (expected # unique quantiles interacted with)]
-	// uses quantiles for numerical attributes and potential attribute values for categorical; a value x falls in quantile i if q_i-1 < x <= q_i
+	// uses quantiles for weights; a value x falls in quantile i if q_i-1 < x <= q_i
 	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	// numQuantiles (optional) number of quantiles to divide numerical attributes into
+	// numQuantiles (optional) number of quantiles to divide weights into
     ial.computeAttributeWeightCoverage = function(time, interactionTypes, numQuantiles) {
     	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
-    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
-    	// TODO: THIS IS JUST COPY/PASTED FROM ATTRIBUTE COVERAGE FOR NOW -- FILL IT IN!
+    	var weightVectorSubset = getWeightVectorQueueSubset(time);
 
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE;
     	currentLog['current_time'] = new Date();
-    	currentLog['number_of_logs'] = interactionSubset.length;
+    	currentLog['number_of_logs'] = weightVectorSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
     	currentLog['time_window'] = time;
     	var currentLogInfo = {};
     	currentLogInfo['attribute_vector'] = {};
-
-    	// compare interactions to quantiles
-    	var maxMetricValue = 0; 
+    	
+    	var quantileMap = {}; // for counting number of weights that occur in each quantile
+    	var changeMap = {}; // for counting number of times each attribute's weight actually changes with each new vector
     	for (var attribute in this.attributeValueMap) {
-    		fullDist = this.attributeValueMap[attribute]['distribution'];
-    		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
-    			var quantiles = {};
-    			var quantileList = [];
-    			for (var i = 0; i < numQuantiles; i++) {
-    				if (i != numQuantiles - 1)
-    					quantVal = fullDist[Math.floor((i + 1) * this.dataSet.length / numQuantiles) - 1];
-    				else
-    					quantVal = fullDist[fullDist.length - 1];
-    				quantileList.push(quantVal);
-    				quantiles[quantVal] = 0;
-    			}
-    	
-    			// figure out distribution of interactions
-    			for (var i = 0; i < interactionSubset.length; i++) {
-    				var curVal = interactionSubset[i]['dataItem'][attribute];
-    				
-    				// figure out which quantile it belongs to
-    				for (var j = 0; j < quantileList.length; j++) {
-    					var quantVal = quantileList[j];
-    					if (j == 0) {
-    						if (curVal <= quantVal) 
-    							quantiles[quantVal] += 1;
-    					} else {
-    						if (curVal <= quantVal && curVal > quantileList[j - 1]) 
-    							quantiles[quantVal] += 1;
-    					}
-    				}
-    			}
-    		
-    			currentLogInfo['attribute_vector'][attribute] = {};
-    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
-    			var coveredQuantiles = 0; 
-    			for (var i = 0; i < quantileList.length; i++) {
-    				var quantVal = quantileList[i];
-    				if (quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
-    			}
-
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(numQuantiles, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = numQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
-    		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
-    			var quantiles = {};
-    			var quantileList = Object.keys(fullDist);
-    	
-    			// figure out distribution of interactions
-    			for (var i = 0; i < interactionSubset.length; i++) {
-    				var attrVal = interactionSubset[i]['dataItem'][attribute];
-    				if (quantiles.hasOwnProperty(attrVal))
-    					quantiles[attrVal] += 1;
-    				else quantiles[attrVal] = 1;
-    			}
-    			
-    			currentLogInfo['attribute_vector'][attribute] = {};
-    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
-    			var coveredQuantiles = 0; 
-    			for (var i = 0; i < quantileList.length; i++) {
-    				var quantVal = quantileList[i];
-    				if (quantiles.hasOwnProperty(quantVal) && quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
-    			}
-
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(quantileList.length, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = quantileList.length; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
-    		}
+    		quantileMap[attribute] = {};
+    		changeMap[attribute] = 1;
     	}
+    	
+    	// define quantiles
+    	var quantileList = [];
+    	for (var i = 0; i < numQuantiles; i++) { 
+    		var quantVal;
+			if (i != numQuantiles - 1)
+				quantVal = this.minWeight + (i + 1) * (this.maxWeight - this.minWeight) / numQuantiles;
+			else
+				quantVal = this.maxWeight;
+			quantileList.push(quantVal);
+			for (var attribute in this.attributeValueMap)
+				quantileMap[attribute][quantVal] = 0;
+		}
 
+    	// count quantiles interacted with for all the weight vectors
+    	// only counts when the weight actually changed
+		for (var i = 0; i < weightVectorSubset.length; i++) {
+			var curWeightVector = weightVectorSubset[i];
+			var oldVector = curWeightVector.oldWeight;
+            var newVector = curWeightVector.newWeight;
+            
+            for (var attribute in this.attributeValueMap) {
+            	// count which quantile the weight falls in
+            	// if it's the first weight vector, check old vector and new vector
+            	var attrWeight;
+            	if (i == 0) {
+            		attrWeight = oldVector[attribute];
+            		// figure out which quantile it belongs to
+                	var whichQuantile = ial.utils.getQuantile(quantileList, attrWeight);
+                	quantileMap[attribute][whichQuantile] += 1;
+            	}
+            	
+            	// for all other weight vectors, check if the weight actually changed
+            	if (oldVector[attribute] != newVector[attribute]) {
+            		changeMap[attribute] += 1;
+	            	
+	            	attrWeight = newVector[attribute];
+	            	// figure out which quantile it belongs to
+	            	var whichQuantile = ial.utils.getQuantile(quantileList, attrWeight);
+	            	quantileMap[attribute][whichQuantile] += 1;
+            	}
+            }
+		}
+		console.log(quantileMap);
+		
+		// compute metric values
+		var maxMetricValue = 0;
+		for (var attribute in this.attributeValueMap) {
+			currentLogInfo['attribute_vector'][attribute] = {};
+			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
+			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
+			var coveredQuantiles = 0; 
+			for (var i = 0; i < quantileList.length; i++) {
+				var quantVal = quantileList[i];
+				if (quantileMap[attribute][quantVal] > 0) {
+					coveredQuantiles ++; 
+					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
+				} else 
+					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
+			}
+	
+			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(numQuantiles, changeMap[attribute]);
+			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
+			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = numQuantiles; 
+			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
+			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
+			if (weightVectorSubset.length == 0) // 100% unique if no interactions
+				percentUnique = 1;
+			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
+			// lower percent of unique interactions -> higher level of bias
+			var metricVal = 1.0 - Math.min(1, percentUnique);
+			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
+			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
+		}
+		
     	currentLog['info'] = currentLogInfo;
     	// in this case, the metric level is the max metric value over all the attributes
     	currentLog['metric_level'] = maxMetricValue;
@@ -2131,13 +2107,14 @@
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	// numQuantiles (optional) number of quantiles to divide numerical attributes into
-    ial.computeAttributeWeightDistribution = function(time, interactionTypes) {
-    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
-
+    ial.computeAttributeWeightDistribution = function(time, interactionTypes, numQuantiles) {
     	// TODO: THIS IS JUST COPY/PASTED FROM ATTRIBUTE COVERAGE FOR NOW -- FILL IT IN!
 
+    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
+    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
+
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = interactionSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -2614,6 +2591,23 @@
     	var num = Math.pow(N, k) - Math.pow((N-1), k);
     	var denom = Math.pow(N, (k-1));
     	return num / denom; 
+    }
+    
+    /*
+     * Returns the quantile in which the given value belongs
+     */
+    ial.utils.getQuantile = function(quantileList, value) {
+    	for (var i = 0; i < quantileList.length; i++) {
+			var quantVal = quantileList[i];
+			if (i == 0) {
+				if (value <= quantVal) 
+					return quantVal;
+			} else {
+				if (value <= quantVal && value > quantileList[i - 1]) 
+					return quantVal;
+			}
+		}
+    	return -1; 
     }
 
 // private
