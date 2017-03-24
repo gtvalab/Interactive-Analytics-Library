@@ -3,7 +3,6 @@
  */
 (function() {
     ial = {};
-    // emily: remove this; var stats = require('./lib/jerzy/jerzy');
     this.ialIdToDataMap = {};
     this.useNormalizedAttributeWeights;
     this.maxWeight; 
@@ -1613,7 +1612,7 @@
         	else if (metric == this.BIAS_ATTRIBUTE_COVERAGE) return ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
         	else if (metric == this.BIAS_ATTRIBUTE_DISTRIBUTION) return ial.computeAttributeDistribution(time, interactionTypes);
         	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE) return ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
-        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION) return ial.computeAttributeWeightDistribution(time, interactionTypes, numQuantiles);
+        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION) return ial.computeAttributeWeightDistribution(time, interactionTypes);
         	// else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
         	else return ial.computeDataPointCoverage(time, interactionTypes);
         } else {
@@ -1624,7 +1623,7 @@
             var attributeCoverage = ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
             var attributeDistribution = ial.computeAttributeDistribution(time, interactionTypes);
             var attributeWeightCoverage = ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
-            var attributeWeightDistribution = ial.computeAttributeWeightDistribution(time, interactionTypes, numQuantiles);
+            var attributeWeightDistribution = ial.computeAttributeWeightDistribution(time, interactionTypes);
             //var screenTimeBias = ial.computeScreenTimeBias();
             
             biasResultMap['data_point_coverage'] = dataPointCoverage;
@@ -1712,14 +1711,13 @@
         
         // 0 if no interactions
         if (Object.keys(origInteractionSubset).length == 0) {
-        	currentLogInfo['max_observed_interactions'] = 1;
+        	currentLogInfo['max_observed_interactions'] = 0;
         	currentLog['info'] = currentLogInfo;
         	currentLog['number_of_logs'] = 0;
         	currentLog['metric_level'] = 0;
         	return currentLog;
         }
         
-        console.log(interactionSubsetByData);
         // compare observed and expected number of interactions for each data point
         var maxObs = 0; 
         var expected = origInteractionSubset.length / this.dataSet.length;
@@ -1729,14 +1727,14 @@
         	var observed = 0; 
         	if (interactionSubsetByData.hasOwnProperty(curData.ial.id))
         		observed = interactionSubsetByData[curData.ial.id].length;
-        	var diff = observed - expected;
+        	var sqDiff = Math.pow(observed - expected, 2) / Number(expected);
         	if (observed > maxObs) maxObs = observed; 
-        	currentLogInfo['distribution_vector'][curData.ial.id] = { 'data_item': curData.ial.id, 'observed': observed, 'expected': expected, 'diff': diff };
-        	chiSq += Math.pow((observed - expected), 2) / expected;
+        	currentLogInfo['distribution_vector'][curData.ial.id] = { 'data_item': curData.ial.id, 'observed': observed, 'expected': expected, 'diff': sqDiff };
+        	chiSq += sqDiff;
         }
         	
         var degFree = origInteractionSubset.length - 1;
-        var prob = getChiSquarePercent(chiSq, degFree);
+        var prob = getChiSquarePercent(chiSq, degFree * this.dataSet.length); // emily: what should DoF be?
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
         currentLogInfo['max_observed_interactions'] = maxObs;
@@ -1867,14 +1865,10 @@
 	// the attribute distribution metric relates to the shape of each attribute in the full distribution and in the distribution based on user interactions 
 	// metric(a_m) = 1 - p, where p is defined as the probability of the Chi^2-statistic (categorial) or the KS-statistic (numerical)
     // Chi^2 = (observed - expected)^2 / expected
-    // KS = largest difference in observed and expected curves
+    // KS = largest difference in observed and expected cdf curves
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	// numQuantiles (optional) number of quantiles to divide numerical attributes into
-    ial.computeAttributeDistribution = function(time, interactionTypes, numQuantiles) {
-    	// TODO: THIS IS JUST COPY/PASTED FROM ATTRIBUTE COVERAGE FOR NOW -- FILL IT IN!
-
-    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
+	ial.computeAttributeDistribution = function(time, interactionTypes) {
     	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
     	var currentLog = {};
@@ -1885,68 +1879,38 @@
     	currentLog['time_window'] = time;
     	var currentLogInfo = {};
     	currentLogInfo['attribute_vector'] = {};
+    	
+    	// 0 if no interactions
+        if (interactionSubset.length == 0) {
+        	currentLog['info'] = currentLogInfo;
+        	currentLog['metric_level'] = 0;
+        	return currentLog;
+        }
 
-    	// compare interactions to quantiles
-    	var maxMetricValue = 0; 
+    	// compare interactions to full distribution of each attribute
+    	var maxMetricVal = 0;
     	for (var attribute in this.attributeValueMap) {
     		fullDist = this.attributeValueMap[attribute]['distribution'];
     		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
-    			var quantiles = {};
-    			var quantileList = [];
-    			for (var i = 0; i < numQuantiles; i++) {
-    				if (i != numQuantiles - 1)
-    					quantVal = fullDist[Math.floor((i + 1) * this.dataSet.length / numQuantiles) - 1];
-    				else
-    					quantVal = fullDist[fullDist.length - 1];
-    				quantileList.push(quantVal);
-    				quantiles[quantVal] = 0;
-    			}
-    	
     			// figure out distribution of interactions
+    			var intDist = [];
     			for (var i = 0; i < interactionSubset.length; i++) {
     				var curVal = interactionSubset[i]['dataItem'][attribute];
-    				
-    				// figure out which quantile it belongs to
-    				for (var j = 0; j < quantileList.length; j++) {
-    					var quantVal = quantileList[j];
-    					if (j == 0) {
-    						if (curVal <= quantVal) 
-    							quantiles[quantVal] += 1;
-    					} else {
-    						if (curVal <= quantVal && curVal > quantileList[j - 1]) 
-    							quantiles[quantVal] += 1;
-    					}
-    				}
+    				intDist.push(curVal); 
     			}
-    		
-    			currentLogInfo['attribute_vector'][attribute] = {};
-    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
-    			var coveredQuantiles = 0; 
-    			for (var i = 0; i < quantileList.length; i++) {
-    				var quantVal = quantileList[i];
-    				if (quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
-    			}
+    			intDist.sort(function(a, b) {return a - b});
+    			
+    			var KS = getKSPercent(new Vector(fullDist), new Vector(intDist));
+    			if (1 - Number(KS['p']) > maxMetricVal) maxMetricVal = 1 - Number(KS['p']);
 
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(numQuantiles, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = numQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
+    			currentLogInfo['attribute_vector'][attribute] = {};
+    			currentLogInfo['attribute_vector'][attribute]['ks'] = KS['ks'];
+    			currentLogInfo['attribute_vector'][attribute]['d'] = KS['d'];
+    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = 1 - KS['p'];
     		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
     			var quantiles = {};
     			var quantileList = Object.keys(fullDist);
+    			var chiSq = 0;
     	
     			// figure out distribution of interactions
     			for (var i = 0; i < interactionSubset.length; i++) {
@@ -1958,35 +1922,33 @@
     			
     			currentLogInfo['attribute_vector'][attribute] = {};
     			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
+    			currentLogInfo['attribute_vector'][attribute]['quantile_distribution'] = {};
+    			
     			var coveredQuantiles = 0; 
     			for (var i = 0; i < quantileList.length; i++) {
     				var quantVal = quantileList[i];
-    				if (quantiles.hasOwnProperty(quantVal) && quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
+    				var expectedCount = interactionSubset.length * fullDist[quantVal] / this.dataSet.length;
+    				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal] = {};
+    				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal]['expected_count'] = expectedCount; 
+        			var obsCount = 0;
+    				if (quantiles.hasOwnProperty(quantVal))
+    					obsCount = quantiles[quantVal];
+    				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal]['observed_count'] = obsCount;
+    				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal]['difference'] = obsCount - expectedCount;
+    				chiSq += Math.pow(obsCount - expectedCount, 2) / expectedCount;
     			}
-
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(quantileList.length, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = quantileList.length; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
+    			
+    			var degFree = interactionSubset.length - 1;
+        		var prob = getChiSquarePercent(chiSq, degFree); // emily: what should DoF be?
+        		currentLogInfo['attribute_vector'][attribute]['degrees_of_freedom'] = degFree;
+        		currentLogInfo['attribute_vector'][attribute]['chi_squared'] = chiSq;
+    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = prob;
+    			if (prob > maxMetricVal) maxMetricVal = prob;
     		}
     	}
 
     	currentLog['info'] = currentLogInfo;
-    	// in this case, the metric level is the max metric value over all the attributes
-    	currentLog['metric_level'] = maxMetricValue;
+    	currentLog['metric_level'] = maxMetricVal;
 
     	this.biasLogs.push(currentLog);
     	return currentLog;
@@ -2060,7 +2022,6 @@
             	}
             }
 		}
-		console.log(quantileMap);
 		
 		// compute metric values
 		var maxMetricValue = 0;
@@ -2100,383 +2061,69 @@
     	return currentLog;
     }
     
-	// the attribute weight distribution metric relates to the shape of each attribute in the full distribution and in the distribution based on user interactions 
-	// metric(a_m) = 1 - p, where p is defined as the probability of the Chi^2-statistic (categorial) or the KS-statistic (numerical)
-    // Chi^2 = (observed - expected)^2 / expected
+	// the attribute weight distribution metric relates to the shape of each attribute weights in the distribution based on user interactions compared to an exponential distribution
+	// metric(a_m) = 1 - p, where p is defined as the probability of the KS-statistic
     // KS = largest difference in observed and expected curves
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	// numQuantiles (optional) number of quantiles to divide numerical attributes into
-    ial.computeAttributeWeightDistribution = function(time, interactionTypes, numQuantiles) {
-    	// TODO: THIS IS JUST COPY/PASTED FROM ATTRIBUTE COVERAGE FOR NOW -- FILL IT IN!
-
-    	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
-    	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
+	ial.computeAttributeWeightDistribution = function(time, interactionTypes) {
+		var weightVectorSubset = getWeightVectorQueueSubset(time);
 
     	var currentLog = {};
     	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION;
     	currentLog['current_time'] = new Date();
-    	currentLog['number_of_logs'] = interactionSubset.length;
+    	currentLog['number_of_logs'] = weightVectorSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
     	currentLog['time_window'] = time;
     	var currentLogInfo = {};
     	currentLogInfo['attribute_vector'] = {};
-
-    	// compare interactions to quantiles
-    	var maxMetricValue = 0; 
-    	for (var attribute in this.attributeValueMap) {
-    		fullDist = this.attributeValueMap[attribute]['distribution'];
-    		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
-    			var quantiles = {};
-    			var quantileList = [];
-    			for (var i = 0; i < numQuantiles; i++) {
-    				if (i != numQuantiles - 1)
-    					quantVal = fullDist[Math.floor((i + 1) * this.dataSet.length / numQuantiles) - 1];
-    				else
-    					quantVal = fullDist[fullDist.length - 1];
-    				quantileList.push(quantVal);
-    				quantiles[quantVal] = 0;
-    			}
     	
-    			// figure out distribution of interactions
-    			for (var i = 0; i < interactionSubset.length; i++) {
-    				var curVal = interactionSubset[i]['dataItem'][attribute];
-    				
-    				// figure out which quantile it belongs to
-    				for (var j = 0; j < quantileList.length; j++) {
-    					var quantVal = quantileList[j];
-    					if (j == 0) {
-    						if (curVal <= quantVal) 
-    							quantiles[quantVal] += 1;
-    					} else {
-    						if (curVal <= quantVal && curVal > quantileList[j - 1]) 
-    							quantiles[quantVal] += 1;
-    					}
-    				}
-    			}
-    		
-    			currentLogInfo['attribute_vector'][attribute] = {};
-    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
-    			var coveredQuantiles = 0; 
-    			for (var i = 0; i < quantileList.length; i++) {
-    				var quantVal = quantileList[i];
-    				if (quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
-    			}
-
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(numQuantiles, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = numQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
-    		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
-    			var quantiles = {};
-    			var quantileList = Object.keys(fullDist);
-    	
-    			// figure out distribution of interactions
-    			for (var i = 0; i < interactionSubset.length; i++) {
-    				var attrVal = interactionSubset[i]['dataItem'][attribute];
-    				if (quantiles.hasOwnProperty(attrVal))
-    					quantiles[attrVal] += 1;
-    				else quantiles[attrVal] = 1;
-    			}
-    			
-    			currentLogInfo['attribute_vector'][attribute] = {};
-    			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
-    			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
-    			var coveredQuantiles = 0; 
-    			for (var i = 0; i < quantileList.length; i++) {
-    				var quantVal = quantileList[i];
-    				if (quantiles.hasOwnProperty(quantVal) && quantiles[quantVal] > 0) {
-    					coveredQuantiles ++; 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = true;
-    				} else 
-    					currentLogInfo['attribute_vector'][attribute]['quantile_coverage'][quantVal] = false;
-    			}
-
-    			var expectedCoveredQuantiles = ial.utils.getMarkovExpectedValue(quantileList.length, interactionSubset.length);
-    			var percentUnique = coveredQuantiles / expectedCoveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['number_of_quantiles'] = quantileList.length; 
-    			currentLogInfo['attribute_vector'][attribute]['covered_quantiles'] = coveredQuantiles; 
-    			currentLogInfo['attribute_vector'][attribute]['expected_covered_quantiles'] = expectedCoveredQuantiles; 
-    			if (interactionSubset.length == 0) // 100% unique if no interactions
-    				percentUnique = 1;
-    			currentLogInfo['attribute_vector'][attribute]['percentage'] = percentUnique;
-    			// lower percent of unique interactions -> higher level of bias
-    			var metricVal = 1.0 - Math.min(1, percentUnique);
-    			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
-    		}
-    	}
-
-    	currentLog['info'] = currentLogInfo;
-    	// in this case, the metric level is the max metric value over all the attributes
-    	currentLog['metric_level'] = maxMetricValue;
-
-    	this.biasLogs.push(currentLog);
-    	return currentLog;
-    }
-
-	// the variance metric relates to the variance of the data interacted with compared to the variance of the dataset as a whole
-	// metric(a_m) = 1 - p, where p is defined as the F statistic (numerical attributes) or the Chi^2 statistic (categorical attributes) for attribute a_m
-	// F = var(D_U(a_m)) / var(D(a_m), where D_U is the data the user has interacted with
-	// CHI^2 = SUM(O(a_m,k) - E(a_m,k))^2 / E(a_m,k), 
-	//    where O is the observed number of data points interacted with that have value k for attribute a_m 
-	//    and E is the expected number of data points interacted with that have value k for attribute a_m
-	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
-	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeVarianceBias = function(time, interactionTypes) {
-        var attributeValueMap = ial.getAttributeValueMap();
-        var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
-
-        var currentLog = {};
-        var curDate = new Date();
-        currentLog['bias_type'] = this.BIAS_VARIANCE;
-        currentLog['current_time'] = new Date();
-        currentLog['number_of_logs'] = interactionSubset.length;
-        var currentLogInfo = {};
-        currentLogInfo['interaction_types'] = interactionTypes;
-        
-        var dataSubset = [];
-        for (var i = 0; i < interactionSubset.length; i++) dataSubset.push(interactionSubset[i].dataItem);
-        var varianceVector = {};
-        
-        // special case of < 2 interactions to compute on: metric level should be 0
-        if (Object.keys(interactionSubset).length < 2) { // 0 if < 2 interactions
-        	for (var attr in attributeValueMap) {
-                varianceVector[attr] = {};
-                varianceVector[attr]["type"] = attributeValueMap[attr].dataType;
-
-                varianceVector[attr]["type"] = attributeValueMap[attr].dataType;
-                varianceVector[attr]["metric_level"] = 0;
-                if (attributeValueMap[attr].dataType == "numeric") {
-                	var curVariance = 0;
-                    var fullVariance = Number(attributeValueMap[attr]['variance']);
-                    var fValue = curVariance / fullVariance;
-                    var dfFull = this.dataSet.length - 1; 
-                    var dfSub = dataSubset.length - 1; 
-	                varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
-	                varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
-	                varianceVector[attr]["f_value"] = fValue;
-                } else if (attributeValueMap[attr].dataType == "categorical") {
-                    // variance for categorical attributes returns chi-squared test
-                    var distr = computeCategoricalDistribution(dataSubset, attr);
-                    var fullDistr = attributeValueMap[attr]["distribution"];
-                    var chiSq = 0; 
-                    for (attrVal in fullDistr) {
-                        var expVal = dataSubset.length * (parseFloat(fullDistr[attrVal]) / this.dataSet.length);
-                        var obsVal = 0; 
-                        if (distr.hasOwnProperty(attrVal)) obsVal = parseFloat(distr[attrVal]);
-                        chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
-                    }
-                    var degFree = Object.keys(fullDistr).length - 1;
-                    
-                    varianceVector[attr]["degrees_of_freedom"] = degFree; 
-                    varianceVector[attr]["chi_squared"] = chiSq;
-                }
-            }
-        	
-        	currentLogInfo['variance_vector'] = varianceVector;
-            currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
+    	// 0 if no interactions
+        if (weightVectorSubset.length == 0) {
         	currentLog['info'] = currentLogInfo;
         	currentLog['metric_level'] = 0;
         	return currentLog;
         }
 
-        var varianceVector = {};
-        var avgProb = 0;
-
-        for (var attr in attributeValueMap) {
-            varianceVector[attr] = {};
-            if (attributeValueMap[attr].dataType == 'numeric') {
-                var curVariance = Number(computeAttributeVariance(dataSubset, attr));
-                var fullVariance = Number(attributeValueMap[attr]['variance']);
-                var fValue = curVariance / fullVariance;
-                var dfFull = this.dataSet.length - 1; 
-                var dfSub = dataSubset.length - 1; 
-                var prob = getFPercent(fValue, dfSub, dfFull);
-                avgProb += prob;
-
-                varianceVector[attr]["type"] = "numeric";
-                varianceVector[attr]["degrees_of_freedom_1_full"] = dfFull; 
-                varianceVector[attr]["degrees_of_freedom_2_sub"] = dfSub;
-                varianceVector[attr]["f_value"] = fValue;
-                varianceVector[attr]["metric_level"] = prob;
-
-            } else if (attributeValueMap[attr].dataType == 'categorical') {
-                // variance for categorical attributes returns chi-squared test
-                var distr = computeCategoricalDistribution(dataSubset, attr);
-                var fullDistr = attributeValueMap[attr]["distribution"];
-                var chiSq = 0; 
-                for (attrVal in fullDistr) {
-                    var expVal = dataSubset.length * (parseFloat(fullDistr[attrVal]) / this.dataSet.length);
-                    var obsVal = 0; 
-                    if (distr.hasOwnProperty(attrVal)) obsVal = parseFloat(distr[attrVal]);
-                    chiSq += Math.pow(obsVal - expVal, 2) / expVal; 
-                }
-                var degFree = Object.keys(fullDistr).length - 1;
-                var prob = getChiSquarePercent(chiSq, degFree);
-                avgProb += prob;
-                
-                varianceVector[attr]["type"] = "categorical";
-                varianceVector[attr]["degrees_of_freedom"] = degFree; 
-                varianceVector[attr]["chi_squared"] = chiSq;
-                varianceVector[attr]["metric_level"] = prob;
-            }
-        }
-        avgProb /= Object.keys(attributeValueMap).length;
-
-        currentLogInfo['variance_vector'] = varianceVector;
-        currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
-        currentLog['info'] = currentLogInfo;
-        // metric level in this case represents the average metric level across all attributes
-        currentLog['metric_level'] = avgProb;
-
-        this.biasLogs.push(currentLog);
-        return currentLog;
-    }
-
-    // the attribute weight metric relates to the percent change in each attribute's weight over time
-    // metric(a_m) = 1 - |w_a_m(t + d) - w_a_m(t)| / w_a_m(t), where w_a_m(t) is the weight of attribute a_m at time t
-    // time (optional) the time frame of interactions to consider (defaults to all logged interactions)
-    // scoreType (optional) alternative ways to consider an attribute's change in weight (span, average, min, or max - defaults to span)
-    ial.computeAttributeWeightBias = function(time, scoreType) {
-        var attributeValueMap = ial.getAttributeValueMap();
-        if (this.ATTRIBUTE_SCORES.indexOf(scoreType) < 0) scoreType = this.ATTRIBUTE_SCORES[0];
-        var weightVectorSubset = getWeightVectorQueueSubset(time);
-
-        var currentLog = {};
-        var curDate = new Date();
-        currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT;
-        currentLog['current_time'] = new Date();
-        currentLog['number_of_logs'] = weightVectorSubset.length;
-        var currentLogInfo = {};
-        currentLogInfo['score_type'] = scoreType;
-
-        var changeVector = {};
+    	// exponential distribution sampled N times between max weight and min weight
+        var expDistr = [];
+        for (var i = 0; i < this.dataSet.length; i++) 
+        	expDistr.push(Math.exp(-1 * i / this.dataSet.length));
         
-        if (Object.keys(weightVectorSubset).length == 0) {
-        	for (var curKey in attributeValueMap) {
-        		changeVector[curKey] = {};
-        		changeVector[curKey]['old'] = 0.0;
-        		changeVector[curKey]['new'] = 0.0;
-        		changeVector[curKey]['change'] = 0.0;
-        		changeVector[curKey]['metric_level'] = 0.0;
+        // compute the distributions of delta weight (change in weight)
+        var weightDistr = {};
+        for (var attribute in this.attributeValueMap) {
+        	var curDistr = [];
+        	for (var i = 0; i < weightVectorSubset.length; i++) {
+        		if (weightVectorSubset[i].newWeight[attribute] != weightVectorSubset[i].oldWeight[attribute])
+        			curDistr.push(Math.abs(weightVectorSubset[i].newWeight[attribute] - weightVectorSubset[i].oldWeight[attribute]));
         	}
-        	currentLogInfo['change_vector'] = changeVector; 
-            currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
-            currentLog['info'] = currentLogInfo;
-            currentLog['metric_level'] = 0;
-            return currentLog;
-        }
-
-        if (scoreType == 'span') {
-        	// consider only the oldest and most recent weight vectors
-            var firstVector = weightVectorSubset[0].oldWeight;
-            var lastVector = weightVectorSubset[weightVectorSubset.length - 1].newWeight;
-            for (var curKey in attributeValueMap) {
-                if (firstVector.hasOwnProperty(curKey) && lastVector.hasOwnProperty(curKey)) {
-                	changeVector[curKey] = {};
-                    var curChange = Math.abs(lastVector[curKey] - firstVector[curKey]);
-                    if (firstVector[curKey] != 0) curChange = curChange / firstVector[curKey];
-                    changeVector[curKey]['old'] = firstVector[curKey]; 
-                    changeVector[curKey]['new'] = lastVector[curKey];
-                    changeVector[curKey]['change'] = curChange;
-                    if (curChange > 1) curChange = 1; // set maximum change to be 1
-                    changeVector[curKey]['metric_level'] = 1.0 - curChange;
-                }
-            }
-        } else if (scoreType == 'min') {
-            // consider the smallest change in weight for each attribute
-            for (var i = 0; i < weightVectorSubset.length; i++) {
-                var oldVector = weightVectorSubset[i].oldWeight;
-                var newVector = weightVectorSubset[i].newWeight;
-                for (var curKey in attributeValueMap) {
-                    if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
-                        var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
-                        if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
-                        if ((!changeVector.hasOwnProperty(curKey)) || (changeVector.hasOwnProperty(curKey) && curChange < changeVector[curKey]['change'])) {
-                        	changeVector[curKey] = {};
-                        	changeVector[curKey]['old'] = oldVector[curKey];
-                        	changeVector[curKey]['new'] = newVector[curKey];
-                        	changeVector[curKey]['change'] = curChange;
-                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = 1.0 - curChange;
-                    	} 
-                    } 
-                }
-            }
-        } else if (scoreType == 'max') {
-            // consider the largest change in weight for each attribute
-            for (var i = 0; i < weightVectorSubset.length; i++) {
-                var oldVector = weightVectorSubset[i].oldWeight;
-                var newVector = weightVectorSubset[i].newWeight;
-                for (var curKey in attributeValueMap) {
-                    if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
-                        var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
-                        if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
-                        if ((!changeVector.hasOwnProperty(curKey)) || (changeVector.hasOwnProperty(curKey) && curChange > changeVector[curKey]['change'])) {
-                        	changeVector[curKey] = {};
-                        	changeVector[curKey]['old'] = oldVector[curKey];
-                        	changeVector[curKey]['new'] = newVector[curKey];
-                        	changeVector[curKey]['change'] = curChange;
-                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = 1.0 - curChange;
-                    	} 
-                    } 
-                }
-            }
-        } else {
-            // compute as scoreType = 'average'
-            var mult = 1 / weightVectorSubset.length;
-            for (var i = 0; i < weightVectorSubset.length; i++) {
-                var oldVector = weightVectorSubset[i].oldWeight;
-                var newVector = weightVectorSubset[i].newWeight;
-                for (var curKey in attributeValueMap) {
-                    if (oldVector.hasOwnProperty(curKey) && newVector.hasOwnProperty(curKey)) {
-                        var curChange = Math.abs(newVector[curKey] - oldVector[curKey]);
-                        if (oldVector[curKey] != 0) curChange = curChange / oldVector[curKey];
-                        if (changeVector.hasOwnProperty(curKey)) {
-                        	changeVector[curKey]['change'] += (mult * curChange);
-                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] += (1.0 - (mult * curChange));
-                        } else {
-                        	changeVector[curKey] = {};
-                        	changeVector[curKey]['change'] = (mult * curChange);
-                        	if (curChange > 1) curChange = 1; // set maximum change to be 1
-                        	changeVector[curKey]['metric_level'] = (1.0 - (mult * curChange));
-                        }
-                    }
-                }
-            }
+        	weightDistr[attribute] = curDistr;
         }
         
-        var avgLevel = 0; 
-        for (var curKey in attributeValueMap)
-        	avgLevel += changeVector[curKey]['metric_level'];
-        avgLevel /= Object.keys(attributeValueMap).length;
+        // compare delta weight distributions to exponential distribution
+    	var maxMetricVal = 0;
+    	for (var attribute in this.attributeValueMap) {
+    		var KS = { ks: undefined, d: undefined, p: 0 };
+    		if (weightDistr[attribute] > 0)
+    			KS = getKSPercent(new Vector(expDistr), new Vector(weightDistr[attribute]));
+    		
+    		if (typeof KS['p'] == undefined) KS['p'] = 0;
+    		if (1 - Number(KS['p']) > maxMetricVal) maxMetricVal = 1 - Number(KS['p']);
 
-        currentLogInfo['change_vector'] = changeVector; 
-        currentLogInfo['num_attributes'] = Object.keys(attributeValueMap).length;
-        currentLog['info'] = currentLogInfo;
-        // metric level in this case represents the average metric level across all attributes
-        currentLog['metric_level'] = avgLevel;
+    		currentLogInfo['attribute_vector'][attribute] = {};
+    		currentLogInfo['attribute_vector'][attribute]['ks'] = KS['ks'];
+    		currentLogInfo['attribute_vector'][attribute]['d'] = KS['d'];
+    		currentLogInfo['attribute_vector'][attribute]['metric_level'] = 1 - KS['p'];
+    	}
 
-        this.biasLogs.push(currentLog);
-        return currentLog;
+    	currentLog['info'] = currentLogInfo;
+    	currentLog['metric_level'] = maxMetricVal;
+
+    	this.biasLogs.push(currentLog);
+    	return currentLog;
     }
-    
+
 	// the screen time metric relates to how long each data item is visible on the screen
     // metric(n) = 1- p, where p is defined as the probability of the Z-statistic (number of standard deviations from the mean)
     ial.computeScreenTimeBias = function() {
@@ -2639,9 +2286,9 @@
     
 /** Probability Distributions **/
 
-// private
-// get the percent probability given the z-score
-// where z-score represents number of standard deviations from the mean
+	// private
+	// get the percent probability given the z-score
+	// where z-score represents number of standard deviations from the mean
     function getZPercent(z) {
     	// if z > 6.5 std dev's from the mean, it requires too many significant digits 
         if ( z < -6.5)
@@ -2666,9 +2313,9 @@
         return sum;
     }
     
-// private 
-// get the percent probability given the f-statistic, numerator degrees of freedom (df1)
-// and denominator degrees of freedom (df2)
+	// private 
+	// get the percent probability given the f-statistic, numerator degrees of freedom (df1)
+	// and denominator degrees of freedom (df2)
     function getFPercent(f, df1, df2) {
     	
     	if (df1 <= 0) {
@@ -2689,8 +2336,8 @@
     	return Fcdf;
     }
     
-// private
-// get the percent probability given the chi^2 test statistic and degrees of freedom
+	// private
+	// get the percent probability given the chi^2 test statistic and degrees of freedom
     function getChiSquarePercent(chiSq, df) {
 		if (df <= 0) {
 			console.log('Degrees of freedom must be positive');
@@ -2702,7 +2349,335 @@
 	    return Chisqcdf;
     } 
     
-/** Statistic Distribution Utility Functions **/
+    // private
+    // get the percent probability given the two distributions
+    // TODO: taken from jerzy library -- figure out how to integrate Node.js to use library directly
+    function getKSPercent(x, y) {
+    	var all = new Vector(x.elements.concat(y.elements)).sort();
+    	var ecdfx = x.ecdf(all);
+    	var ecdfy = y.ecdf(all);
+    	var d = ecdfy.subtract(ecdfx).abs().max();
+    	var n = (x.length() * y.length()) / (x.length() + y.length());
+    	var ks = Math.sqrt(n) * d;
+    	var p = 1 - new Kolmogorov().distr(ks);
+
+    	return {
+    		"d": d,
+    		"ks": ks,
+    		"p": p
+    	};
+    }
+    
+    /** Jerzy vector **/
+    
+    Vector = function(elements) {
+    	this.elements = elements;
+    };
+
+    Vector.prototype.push = function(value) {
+    	this.elements.push(value);
+    };
+
+    Vector.prototype.map = function(fun) {
+    	return new Vector(this.elements.map(fun));
+    };
+
+    Vector.prototype.length = function() {
+    	return this.elements.length;
+    };
+
+    Vector.prototype.concat = function(x) {
+    	return new Vector(this.elements.slice(0).concat(x.elements.slice(0)));
+    };
+
+    Vector.prototype.abs = function() {
+    	var values = [];
+    	for (var i = 0; i < this.elements.length; i++) {
+    		values.push(Math.abs(this.elements[i]));
+    	}
+    	return new Vector(values);
+    };
+
+    Vector.prototype.dot = function(v) {
+    	var result = 0;
+    	for (var i = 0; i < this.length(); i++) {
+    		result = result + this.elements[i] * v.elements[i];
+    	}
+    	return result;
+    };
+
+    Vector.prototype.sum = function() {
+    	var sum = 0;
+    	for (var i = 0, n = this.elements.length; i < n; ++i) {
+    		sum += this.elements[i];
+    	}
+    	return sum;
+    };
+
+    Vector.prototype.log = function() {
+    	var result = new Vector(this.elements.slice(0));
+    	for (var i = 0, n = this.elements.length; i < n; ++i) {
+    		result.elements[i] = Math.log(result.elements[i]);
+    	}
+    	return result;
+    };
+
+    Vector.prototype.add = function(term) {
+    	var result = new Vector(this.elements.slice(0));
+    	if (term instanceof Vector) {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] += term.elements[i];
+    		}
+    	} else {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] += term;
+    		}
+    	}
+    	return result;
+    };
+
+    Vector.prototype.subtract = function(term) {
+    	return this.add(term.multiply(-1));
+    };
+
+    Vector.prototype.multiply = function(factor) {
+    	var result = new Vector(this.elements.slice(0));
+    	if (factor instanceof Vector) {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] = result.elements[i] * factor.elements[i];
+    		}
+    	} else {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] = result.elements[i] * factor;
+    		}
+    	}
+    	return result;
+    };
+
+    Vector.prototype.pow = function(p) {
+    	var result = new Vector(this.elements.slice(0));
+    	if (p instanceof Vector) {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] = Math.pow(result.elements[i], p.elements[i]);
+    		}
+    	} else {
+    		for (var i = 0, n = result.elements.length; i < n; ++i) {
+    			result.elements[i] = Math.pow(result.elements[i], p);
+    		}
+    	}
+    	return result;
+    };
+
+    Vector.prototype.mean = function() {
+    	var sum = 0;
+    	for (var i = 0, n = this.elements.length; i < n; ++i) {
+    		sum += this.elements[i];
+    	}
+    	return sum / this.elements.length;
+    };
+
+    Vector.prototype.median = function() {
+    	var sorted = this.sort();
+    	var middle = Math.floor(sorted.length() / 2);
+    	if (sorted.length() % 2) {
+    		return sorted.elements[middle];
+    	} else {
+    		return (sorted.elements[middle - 1] + sorted.elements[middle]) / 2;
+    	}
+    };
+
+    Vector.prototype.q1 = function() {
+    	var sorted = this.sort();
+    	var middle = Math.floor(sorted.length() / 2);
+    	var e = sorted.slice(0, middle);
+    	console.log(e);
+    	return e.median();
+    };
+
+    Vector.prototype.q3 = function() {
+    	var sorted = this.sort();
+    	var middle = Math.ceil(sorted.length() / 2);
+    	var e = sorted.slice(middle);
+    	return e.median();
+    };
+
+    Vector.prototype.slice = function(start, end) {
+        if (typeof end === "undefined") {
+            return new Vector(this.elements.slice(start));
+        } else {
+        	return new Vector(this.elements.slice(start, end));
+        }
+    };
+
+    Vector.prototype.geomean = function() {
+    	return Math.exp(this.log().sum() / this.elements.length);
+    };
+
+    Vector.prototype.sortElements = function() {
+    	var sorted = this.elements.slice(0);
+    	for (var i = 0, j, tmp; i < sorted.length; ++i) {
+    		tmp = sorted[i];
+    		for (j = i - 1; j >= 0 && sorted[j] > tmp; --j) {
+    			sorted[j + 1] = sorted[j];
+    		}
+    		sorted[j + 1] = tmp;
+    	}
+    	return sorted;
+    };
+
+    Vector.prototype._ecdf = function(x) {
+    	var sorted = this.sortElements();
+    	var count = 0;
+    	for (var i = 0; i < sorted.length && sorted[i] <= x; i++) {
+    		count++;	
+    	}
+    	return count / sorted.length;
+    };
+
+    Vector.prototype.ecdf = function(arg) {
+    	if (arg instanceof Vector) {
+    		var result = new Vector([]);
+    		for (var i = 0; i < arg.length(); i++) {
+    			result.push(this._ecdf(arg.elements[i]));
+    		}
+    		return result;
+    	} else {
+    		return this._ecdf(arg);
+    	}
+    };
+
+    Vector.prototype.sort = function() {
+    	return new Vector(this.sortElements());
+    };
+
+    Vector.prototype.min = function() {
+    	return this.sortElements()[0];
+    };
+
+    Vector.prototype.max = function() {
+    	return this.sortElements().pop();
+    };
+
+    Vector.prototype.toString = function() {
+    	return "[" + this.elements.join(", ") + "]";
+    };
+
+    /*
+     * unbiased sample variance
+     */
+
+    Vector.prototype.variance = function() {
+    	return this.ss() / (this.elements.length - 1);
+    };
+
+    /*
+     * biased sample variance
+     */
+
+    Vector.prototype.biasedVariance = function() {
+    	return this.ss() / this.elements.length;
+    };
+
+    /*
+     * corrected sample standard deviation
+     */
+
+    Vector.prototype.sd = function() {
+    	return Math.sqrt(this.variance());
+    };
+
+    /*
+     * uncorrected sample standard deviation
+     */
+
+    Vector.prototype.uncorrectedSd = function() {
+    	return Math.sqrt(this.biasedVariance());
+    };
+
+    /*
+     * standard error of the mean
+     */
+
+     Vector.prototype.sem = function() {
+     	return this.sd() / Math.sqrt(this.elements.length);
+     };
+
+    /*
+     * total sum of squares
+     */
+
+    Vector.prototype.ss = function() {
+    	var m = this.mean();
+    	var sum = 0;
+    	for (var i = 0, n = this.elements.length; i < n; ++i) {
+    		sum += Math.pow(this.elements[i] - m, 2);
+    	}
+    	return sum;
+    };
+
+    /*
+     * residuals
+     */
+
+    Vector.prototype.res = function() {
+    	return this.add(-this.mean());
+    };
+
+    Vector.prototype.kurtosis = function() {
+    	return this.res().pow(4).mean() / Math.pow(this.res().pow(2).mean(), 2);
+    };
+
+    Vector.prototype.skewness = function() {
+    	return this.res().pow(3).mean() / Math.pow(this.res().pow(2).mean(), 3 / 2);
+    };
+
+    Sequence.prototype = new Vector();
+
+    Sequence.prototype.constructor = Sequence;
+
+    function Sequence(min, max, step) {
+    	this.elements = [];
+    	for (var i = min; i <= max; i = i + step) {
+    		this.elements.push(i);
+    	}
+    };
+    
+    /** Statistic Distribution Utility Functions **/
+    
+    Kolmogorov = function() {};
+
+    Kolmogorov.prototype._di = function(x) {
+    	var term;
+    	var sum = 0;
+    	var k = 1;
+    	do {
+    		term = Math.exp(-Math.pow(2 * k - 1, 2) * Math.pow(Math.PI, 2) / (8 * Math.pow(x, 2)));
+    		sum = sum + term;
+    		k++;
+    	} while (Math.abs(term) > 0.000000000001);
+    	return Math.sqrt(2 * Math.PI) * sum / x;
+    };
+
+    Kolmogorov.prototype.distr = function(arg) {
+            if (arg instanceof Vector) {
+                    result = new Vector([]);
+                    for (var i = 0; i < arg.length(); ++i) {
+                            result.push(this._di(arg.elements[i]));
+                    }
+                    return result;
+            } else {
+                    return this._di(arg);
+            }
+    };
+
+    Kolmogorov.prototype.inverse = function(x) {
+    	return (function (o, x) {
+    		var t = numeric.Numeric.bisection(function(y) {
+    			return o._di(y) - x;
+    		}, 0, 1);
+    		return t;
+    	})(this, x);
+    };
     
 	function LogGamma(Z) {
     	with (Math) {
