@@ -2085,19 +2085,19 @@
         	return currentLog;
         }
 
-    	// exponential distribution sampled N times between max weight and min weight
+    	// exponential distribution sampled N+1 times between 0 and (max weight - min weight)
         var expDistr = [];
-        for (var i = 0; i < this.dataSet.length; i++) 
-        	expDistr.push(Math.exp(-1 * i / this.dataSet.length));
+        for (var i = 0; i <= this.dataSet.length; i++) {
+        	var xVal = i * Math.abs(this.maxWeight - this.minWeight) / this.dataSet.length;
+        	expDistr.push(Math.exp(-1 * xVal));
+        }
         
         // compute the distributions of delta weight (change in weight)
         var weightDistr = {};
         for (var attribute in this.attributeValueMap) {
         	var curDistr = [];
-        	for (var i = 0; i < weightVectorSubset.length; i++) {
-        		if (weightVectorSubset[i].newWeight[attribute] != weightVectorSubset[i].oldWeight[attribute])
-        			curDistr.push(Math.abs(weightVectorSubset[i].newWeight[attribute] - weightVectorSubset[i].oldWeight[attribute]));
-        	}
+        	for (var i = 0; i < weightVectorSubset.length; i++)
+        		curDistr.push(Math.abs(weightVectorSubset[i].newWeight[attribute] - weightVectorSubset[i].oldWeight[attribute]));
         	weightDistr[attribute] = curDistr;
         }
         
