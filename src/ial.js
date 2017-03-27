@@ -1738,7 +1738,7 @@
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
         currentLogInfo['max_observed_interactions'] = maxObs;
-        currentLog['info'] = currentLogInfo;
+        currentLog['info'] = currentLogInfo; // emily HERE
         currentLog['metric_level'] = prob;
 
         this.biasLogs.push(currentLog);
@@ -1906,7 +1906,7 @@
     			currentLogInfo['attribute_vector'][attribute] = {};
     			currentLogInfo['attribute_vector'][attribute]['ks'] = KS['ks'];
     			currentLogInfo['attribute_vector'][attribute]['d'] = KS['d'];
-    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = 1 - KS['p'];
+    			currentLogInfo['attribute_vector'][attribute]['metric_level'] = 1 - KS['p']; 
     		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
     			var quantiles = {};
     			var quantileList = Object.keys(fullDist);
@@ -2104,11 +2104,11 @@
         // compare delta weight distributions to exponential distribution
     	var maxMetricVal = 0;
     	for (var attribute in this.attributeValueMap) {
-    		var KS = { ks: undefined, d: undefined, p: 0 };
+    		var KS = { ks: undefined, d: undefined, p: 1 };
     		if (weightDistr[attribute] > 0)
     			KS = getKSPercent(new Vector(expDistr), new Vector(weightDistr[attribute]));
     		
-    		if (typeof KS['p'] == undefined) KS['p'] = 0;
+    		if (typeof KS['p'] == undefined) KS['p'] = 1;
     		if (1 - Number(KS['p']) > maxMetricVal) maxMetricVal = 1 - Number(KS['p']);
 
     		currentLogInfo['attribute_vector'][attribute] = {};
