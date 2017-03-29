@@ -1733,12 +1733,12 @@
         	chiSq += sqDiff;
         }
         	
-        var degFree = origInteractionSubset.length - 1;
-        var prob = getChiSquarePercent(chiSq, degFree * this.dataSet.length); // emily: what should DoF be?
+        var degFree = 1;
+        var prob = getChiSquarePercent(chiSq, degFree);
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
         currentLogInfo['max_observed_interactions'] = maxObs;
-        currentLog['info'] = currentLogInfo; // emily HERE
+        currentLog['info'] = currentLogInfo;
         currentLog['metric_level'] = prob;
 
         this.biasLogs.push(currentLog);
@@ -1938,8 +1938,8 @@
     				chiSq += Math.pow(obsCount - expectedCount, 2) / expectedCount;
     			}
     			
-    			var degFree = interactionSubset.length - 1;
-        		var prob = getChiSquarePercent(chiSq, degFree); // emily: what should DoF be?
+    			var degFree = quantileList.length - 1;
+        		var prob = getChiSquarePercent(chiSq, quantileList.length - 1); 
         		currentLogInfo['attribute_vector'][attribute]['degrees_of_freedom'] = degFree;
         		currentLogInfo['attribute_vector'][attribute]['chi_squared'] = chiSq;
     			currentLogInfo['attribute_vector'][attribute]['metric_level'] = prob;
