@@ -1733,7 +1733,7 @@
         	chiSq += sqDiff;
         }
         	
-        var degFree = 1;
+        var degFree = this.dataSet.length - 1;
         var prob = getChiSquarePercent(chiSq, degFree);
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
