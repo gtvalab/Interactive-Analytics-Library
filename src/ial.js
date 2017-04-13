@@ -1606,6 +1606,7 @@
     // numQuantiles (optional) number of quantiles to divide numerical attributes into (default is 4)
 	// returns true if bias is detected, false otherwise
     ial.computeBias = function(metric, time, interactionTypes) {
+    	var numQuantiles = 4;
     	if (typeof metric !== 'undefined') {
         	if (metric == this.BIAS_DATA_POINT_COVERAGE) return ial.computeDataPointCoverage(time, interactionTypes);
         	else if (metric == this.BIAS_DATA_POINT_DISTRIBUTION) return ial.computeDataPointDistribution(time, interactionTypes);
