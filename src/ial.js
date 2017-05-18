@@ -3,10 +3,16 @@
  */
 (function() {
     ial = {};
+    ial.log = {};
+    ial.usermodel = {};
+    ial.usermodel.bias = {};
+    ial.analytics = {};
+    
     this.ialIdToDataMap = {};
     this.useNormalizedAttributeWeights;
     this.maxWeight; 
     this.minWeight;
+    
     /*
      * specialAttributeList is an optional list of one or more attributes
      * condition is either 'includeOnly','exclude'
@@ -19,17 +25,17 @@
         this.maxWeight = Number(maximumWeight);
         
         specialAttributeList = typeof specialAttributeList !== 'undefined' ? specialAttributeList : [];
-        if(specialAttributeList.length>0){
-            if(['includeOnly','exclude'].indexOf(condition)==-1){
+        if (specialAttributeList.length > 0) {
+            if (['includeOnly','exclude'].indexOf(condition) == -1) {
                 throw 'ERROR: condition must be "includeOnly" or "exclude"';
-                return ;
+                return;
             }
         } 
 
         this.attrVector = {};
         this.dataSet = passedData;
         this.clusters = [];
-        this.attributeWeightVector = {}; // map of attributes to weights in range [minWeight,maxWeight]
+        this.attributeWeightVector = {}; // map of attributes to weights in range [minWeight, maxWeight]
         this.ialIdToDataMap  = {}; // map from ialId to actual data item
         this.attributeValueMap = {}; // map from attribute name to its data type and summary statistics about it
         this.activeAttributeCount = 0;
@@ -113,7 +119,7 @@
 
         if(normalizeAttributeWeights==1) {
             this.useNormalizedAttributeWeights = 1;
-            ial.normalizeAttributeWeightVector();
+            ial.usermodel.normalizeAttributeWeightVector();
         } else this.useNormalizedAttributeWeights = 0;
 
         // find mean, min, and max for all attributes
@@ -193,7 +199,7 @@
         }
 
         for(var index in passedData){
-            this.dataSet[index]["ial"]["itemScore"] = parseFloat(getItemScore(this.ialIdToDataMap[index],this.attributeWeightVector));
+            this.dataSet[index]["ial"]["itemScore"] = parseFloat(ial.usermodel.getItemScore(this.ialIdToDataMap[index],this.attributeWeightVector));
         }
     };
 
@@ -283,7 +289,7 @@
             weightSum += parseFloat(this.attributeWeightVector[attribute]);
         }
         return weightSum;
-    };
+    }; // remove?
     
     ial.getAttributeVectorAbsoluteSum = function() {
     	var weightSum = 0.0;
@@ -291,14 +297,14 @@
     		weightSum += Math.abs(parseFloat(this.attributeWeightVector[attribute]));
     	}
     	return weightSum;
-    };
+    }; // remove?
 
 
     /*
      * computes item score
      * params: data point object, current attribute weight vector
      * */
-    function getItemScore(d,attributeVector){
+    ial.usermodel.getItemScore = function(d,attributeVector) {
         var score = 0.0;
         for(var attribute in attributeVector){
             if(attributeVector[attribute]>0.0 && !isNaN(d[attribute])){
@@ -315,26 +321,26 @@
     /*
      * updates item scores for all data points
      * */
-    ial.updateItemScores = function () {
-        for(var ialId in this.ialIdToDataMap){
-            var d = this.ialIdToDataMap[ialId];
-            d.ial.itemScore = parseFloat(getItemScore(d,this.attributeWeightVector));
+    ial.usermodel.updateItemScores = function () {
+        for(var ialId in ial.ialIdToDataMap){
+            var d = ial.ialIdToDataMap[ialId];
+            d.ial.itemScore = parseFloat(ial.usermodel.getItemScore(d,ial.attributeWeightVector));
         }
     };
 
     /*
      * Normalize weight vector 
      * */
-    ial.normalizeAttributeWeightVector = function () {
+    ial.usermodel.normalizeAttributeWeightVector = function () {
         var activeSum = 0; // sum of absolute value of attribute weights
-        for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]!=0.0){
-                activeSum += Math.abs(this.attributeWeightVector[attribute]);
+        for(var attribute in ial.attributeWeightVector){
+            if(ial.attributeWeightVector[attribute]!=0.0){
+                activeSum += Math.abs(ial.attributeWeightVector[attribute]);
             }
         }
-        for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]!=0.0){
-                this.attributeWeightVector[attribute] = this.attributeWeightVector[attribute]/activeSum;
+        for(var attribute in ial.attributeWeightVector){
+            if(ial.attributeWeightVector[attribute]!=0.0){
+                ial.attributeWeightVector[attribute] = ial.attributeWeightVector[attribute]/activeSum;
             }
         }
     };
@@ -344,9 +350,9 @@
             inputMap[attribute] = 1-inputMap[attribute];
         }
         return inputMap;
-    };
+    }; // remove?
 
-    var getNormalizedMap = function (inputMap) {
+    var getNormalizedMap = function (inputMap) { // * usermodel
         var activeSum = 0;
         for(var attribute in inputMap){
             activeSum += inputMap[attribute];
@@ -356,7 +362,7 @@
         }
 
         return inputMap;
-    };
+    }; 
 
 
     /*
@@ -369,7 +375,7 @@
     /*
      * sets weight to new value
      * */
-    ial.setItemWeight = function (d,newWeight,logEvent,additionalLogInfoMap) {
+    ial.usermodel.setItemWeight = function (d,newWeight,logEvent,additionalLogInfoMap) {
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
@@ -384,17 +390,17 @@
         d.ial.weight = newWeight;
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track item weight changes in interactionQueue
-            ial.interactionEnqueue(logObj);
+            ial.log.interactionEnqueue(logObj);
         }
     };
 
     /*
      * increments weight by increment value
      * */
-    ial.incrementItemWeight = function (d,increment,logEvent,additionalLogInfoMap) {
-        logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
+    ial.usermodel.incrementItemWeight = function (d,increment,logEvent,additionalLogInfoMap) {
+    	logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
         var logObj = new LogObj(d);
@@ -409,9 +415,9 @@
         }
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track item weight changes in interactionQueue
-            ial.interactionEnqueue(logObj);
+            ial.log.interactionEnqueue(logObj);
         }
         //console.log(logObj)
     };
@@ -452,7 +458,7 @@
             dataPoint['ial'] = {};
             dataPoint['ial']['id'] = newId;
             dataPoint['ial']['weight'] = 1;
-            dataPoint['ial']['itemScore'] = parseFloat(getItemScore(dataPoint,this.attributeWeightVector));
+            dataPoint['ial']['itemScore'] = parseFloat(ial.usermodel.getItemScore(dataPoint,this.attributeWeightVector));
 
             this.ialIdToDataMap[newId] = dataPoint;
             this.dataSet.push(dataPoint);
@@ -478,8 +484,8 @@
     /*
      * returns current attributeWeightVector
      * */
-    ial.getAttributeWeightVector = function(){
-        return ial.utils.clone(this.attributeWeightVector);
+    ial.usermodel.getAttributeWeightVector = function(){
+        return ial.utils.clone(ial.attributeWeightVector);
     };
 
     ial.getIalIdToDataMap = function () {
@@ -489,9 +495,9 @@
     /*
      * returns requested attribute's weight
      * */
-    ial.getAttributeWeight = function (attribute) {
-        if (attribute in this.attributeWeightVector){
-            return this.attributeWeightVector[attribute];
+    ial.usermodel.getAttributeWeight = function (attribute) {
+        if (attribute in ial.attributeWeightVector){
+            return ial.attributeWeightVector[attribute];
         }else{
             throw "Attribute not available or not specifed in weight vector during initialization."
         }
@@ -501,137 +507,136 @@
     /*
      * sets attribute's weight to newWeight. Checks to ensure that the weight is always in [minWeight,maxWeight]
      * */
-    ial.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfoMap){
+    ial.usermodel.setAttributeWeight = function(attribute,newWeight,logEvent,additionalLogInfoMap){
 
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
         var logObj = new LogObj(attribute);
-        logObj.setOldWeight(this.attributeWeightVector[attribute]);
+        logObj.setOldWeight(ial.attributeWeightVector[attribute]);
         logObj.setEventName('AttributeWeightChange_SET');
 
-        if(this.useNormalizedAttributeWeights==0) {
-            if (newWeight > this.maxWeight) {
-                this.attributeWeightVector[attribute] = this.maxWeight;
-            } else if (newWeight < this.minWeight) {
-                this.attributeWeightVector[attribute] = this.minWeight;
+        if(ial.useNormalizedAttributeWeights==0) {
+            if (newWeight > ial.maxWeight) {
+                ial.attributeWeightVector[attribute] = ial.maxWeight;
+            } else if (newWeight < ial.minWeight) {
+                ial.attributeWeightVector[attribute] = ial.minWeight;
             } else {
-                this.attributeWeightVector[attribute] = newWeight;
+                ial.attributeWeightVector[attribute] = newWeight;
             }
         }else{
-            this.attributeWeightVector[attribute] = newWeight;
-            ial.normalizeAttributeWeightVector(); 
+            ial.attributeWeightVector[attribute] = newWeight;
+            ial.usermodel.normalizeAttributeWeightVector(); 
         }
 
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
-        logObj.setNewWeight(this.attributeWeightVector[attribute]);
+        logObj.setNewWeight(ial.attributeWeightVector[attribute]);
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
+            ial.log.attributeWeightVectorEnqueue(logObj);
         }
 
-        ial.updateItemScores();
+        ial.usermodel.updateItemScores();
     };
 
     /*
      * Increments attribute's weight by increment. Checks to ensure that the weight is always in [minWeight,maxWeight]
      * */
-    ial.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
+    ial.usermodel.incrementAttributeWeight = function(attribute,increment,logEvent,additionalLogInfoMap){
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
         var logObj = new LogObj(attribute);
-        logObj.setOldWeight(this.attributeWeightVector[attribute]);
+        logObj.setOldWeight(ial.attributeWeightVector[attribute]);
         logObj.setEventName('AttributeWeightChange_UPDATE');
 
-        var newWeight = this.attributeWeightVector[attribute] + increment;
+        var newWeight = ial.attributeWeightVector[attribute] + increment;
 
-        if(this.useNormalizedAttributeWeights==0) {
-            if (newWeight > this.maxWeight) {
-                this.attributeWeightVector[attribute] = this.maxWeight;
-            } else if (newWeight < this.minWeight) {
-                this.attributeWeightVector[attribute] = this.minWeight;
+        if(ial.useNormalizedAttributeWeights==0) {
+            if (newWeight > ial.maxWeight) {
+                ial.attributeWeightVector[attribute] = ial.maxWeight;
+            } else if (newWeight < ial.minWeight) {
+                ial.attributeWeightVector[attribute] = ial.minWeight;
             } else {
-                this.attributeWeightVector[attribute] = newWeight;
+                ial.attributeWeightVector[attribute] = newWeight;
             }
         }else{
-            this.attributeWeightVector[attribute] = newWeight;
-            ial.normalizeAttributeWeightVector();
+            ial.attributeWeightVector[attribute] = newWeight;
+            ial.usermodel.normalizeAttributeWeightVector();
         }
 
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
-        logObj.setNewWeight(this.attributeWeightVector[attribute]);
+        logObj.setNewWeight(ial.attributeWeightVector[attribute]);
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
+            ial.log.attributeWeightVectorEnqueue(logObj);
         }
 
-        ial.updateItemScores();
+        ial.usermodel.updateItemScores();
     };
 
     /*
      * Sets the attribute weight vector to the newly passed map
      * */
-    ial.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additionalLogInfoMap){
+    ial.usermodel.setAttributeWeightVector = function(newAttributeWeightVector,logEvent,additionalLogInfoMap){
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(ial.attributeWeightVector));
+        logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_SETALL');
 
-        this.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
-        for(var attribute in this.attributeWeightVector){
-            if(this.attributeWeightVector[attribute]>this.maxWeight){
-                this.attributeWeightVector[attribute] = this.maxWeight;
+        ial.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
+        for(var attribute in ial.attributeWeightVector){
+            if(ial.attributeWeightVector[attribute]>ial.maxWeight){
+                ial.attributeWeightVector[attribute] = ial.maxWeight;
             }
-            if(this.attributeWeightVector[attribute]<this.minWeight){
-                this.attributeWeightVector[attribute] = this.minWeight;
+            if(ial.attributeWeightVector[attribute]<ial.minWeight){
+                ial.attributeWeightVector[attribute] = ial.minWeight;
             }
         }
 
-        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
+            ial.log.attributeWeightVectorEnqueue(logObj);
         }
 
-        if(this.useNormalizedAttributeWeights==1){
-            ial.normalizeAttributeWeightVector();
+        if(ial.useNormalizedAttributeWeights==1){
+            ial.usermodel.normalizeAttributeWeightVector();
         }
 
-        ial.updateItemScores();
+        ial.usermodel.updateItemScores();
     };
 
     /*
-     * resets the attributeWeightVector to have all 0s
-     * TODO: what should reset actually do? all 0s? all maxWeights? all minWeights?
+     * resets the attributeWeightVector to have all maxWeight's
      * */
-    ial.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
+    ial.usermodel.resetAttributeWeightVector = function (logEvent,additionalLogInfoMap) {
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.utils.clone(ial.printAttributeWeightVectorQueue));
-        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(ial.log.printAttributeWeightVectorQueue));
+        logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_RESET');
 
-        for(var attribute in this.attributeWeightVector){
-            this.attributeWeightVector[attribute] = 0.0;
+        for(var attribute in ial.attributeWeightVector){
+            ial.attributeWeightVector[attribute] = ial.maxWeight;
         }
 
 
@@ -639,56 +644,56 @@
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
-        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
+            ial.log.attributeWeightVectorEnqueue(logObj);
         }
 
-        if(this.useNormalizedAttributeWeights==1){
-            ial.normalizeAttributeWeightVector();
+        if(ial.useNormalizedAttributeWeights==1){
+            ial.usermodel.normalizeAttributeWeightVector();
         }
 
-        ial.updateItemScores();
+        ial.usermodel.updateItemScores();
     };
 
     /*
      * Nullifies attributeWeightVector to 0s
      * */
-    ial.nullifyAttributeWeightVector = function (logEvent, additionalLogInfoMap) {
+    ial.usermodel.nullifyAttributeWeightVector = function (logEvent, additionalLogInfoMap) {
 
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-        var logObj = new LogObj(ial.utils.clone(this.attributeWeightVector));
-        logObj.setOldWeight(ial.utils.clone(this.attributeWeightVector));
+        var logObj = new LogObj(ial.utils.clone(ial.attributeWeightVector));
+        logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
         logObj.setEventName('AttributeWeightChange_NULLIFY');
 
-        for(var attribute in this.attributeWeightVector){
-            this.attributeWeightVector[attribute] = 0.0;
+        for(var attribute in ial.attributeWeightVector){
+            ial.attributeWeightVector[attribute] = 0.0;
         }
 
-        logObj.setNewWeight(ial.utils.clone(this.attributeWeightVector));
+        logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
         if(additionalLogInfoMap!={}){
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
 
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
             // track attribute weight changes in attributeWeightVectorQueue
-            ial.attributeWeightVectorEnqueue(logObj);
+            ial.log.attributeWeightVectorEnqueue(logObj);
         }
 
-        ial.updateItemScores();
+        ial.usermodel.updateItemScores();
     };
     
 
     /*
      * Returns top N points based on interaction weight (a.k.a. weight)
      * */
-    ial.getTopNPointsByInteractionWeights = function (N,logEvent,additionalLogInfoMap) {
+    ial.usermodel.getTopNPointsByInteractionWeights = function (N,logEvent,additionalLogInfoMap) {
         N = typeof N !== 'undefined' ? N : 1;
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
@@ -698,7 +703,7 @@
         logObj.setEventName('GetTopN_ByInteractionWeight');
 
 
-        var list = this.dataSet.slice(0);
+        var list = ial.dataSet.slice(0);
         sortObj(list, 'ial.weight', 'd');
 
         logObj.setNewWeight('');
@@ -707,7 +712,7 @@
         }
         logObj.setEventSpecificInfo({'dataReturned':list.slice(0,N),'N':N});
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
         }
 
         return list.slice(0,N);
@@ -716,7 +721,7 @@
     /*
      * Returns top N points based on interaction weight (a.k.a. weight)
      * */
-    ial.getTopNPointsByScores = function (N,logEvent,additionalLogInfoMap) {
+    ial.usermodel.getTopNPointsByScores = function (N,logEvent,additionalLogInfoMap) {
         N = typeof N !== 'undefined' ? N : 1;
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
@@ -726,7 +731,7 @@
         logObj.setEventName('GetTopN_ByScore');
 
 
-        var list = this.dataSet.slice(0);
+        var list = ial.dataSet.slice(0);
         sortObj(list, 'ial.itemScore', 'd');
 
         var topNPoints = list.slice(0,N);
@@ -736,7 +741,7 @@
         }
         logObj.setEventSpecificInfo({'dataReturned':topNPoints,'N':N});
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
         }
 
         return topNPoints;
@@ -746,7 +751,7 @@
     /*
      * return an array of the n most similar points to the given data point
      */
-    ial.getNSimilarPoints = function(dataPoint, n,logEvent,additionalLogInfoMap) {
+    ial.usermodel.getNSimilarPoints = function(dataPoint, n,logEvent,additionalLogInfoMap) {
 
         logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
         additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
@@ -759,22 +764,22 @@
 
         // locate the given point
         var dataPt;
-        if (id in this.ialIdToDataMap) {
-            dataPt = this.ialIdToDataMap[id];
+        if (id in ial.ialIdToDataMap) {
+            dataPt = ial.ialIdToDataMap[id];
         } else { return []; }
 
         var allPts = [];
         var similarPts = [];
 
-        for (var i in this.dataSet) {
+        for (var i in ial.dataSet) {
             // don't care to get the similarity with itself
-            if (this.dataSet[i]["ial"]["id"] != id) {
-                var similarityScore = ial.getSimilarityScore(dataPt, this.dataSet[i]);
+            if (ial.dataSet[i]["ial"]["id"] != id) {
+                var similarityScore = ial.usermodel.getSimilarityScore(dataPt, ial.dataSet[i]);
                 if (similarityScore != -1) {
-                    var newPt = { "data" : this.dataSet[i], "similarity" : similarityScore };
+                    var newPt = { "data" : ial.dataSet[i], "similarity" : similarityScore };
                     allPts.push(newPt);
                 } else
-                    console.log("GetNSimilarPoints: Score of -1 between id " + id + " and id " + this.dataSet[i]["ial"]["id"]);
+                    console.log("GetNSimilarPoints: Score of -1 between id " + id + " and id " + ial.dataSet[i]["ial"]["id"]);
             }
         }
 
@@ -790,7 +795,7 @@
             logObj.setCustomLogInfo(additionalLogInfoMap);
         }
         if(logEvent==true){
-            this.sessionLogs.push(logObj);
+            ial.sessionLogs.push(logObj);
         }
 
         return similarPts;
@@ -800,21 +805,21 @@
      * get the similarity score of the two given items
      * lower value indicates more similar
      */
-    ial.getSimilarityScore = function(dataPoint1, dataPoint2) {
+    ial.usermodel.getSimilarityScore = function(dataPoint1, dataPoint2) {
         var id1 = dataPoint1.ial.id;
         var id2 = dataPoint2.ial.id;
         // locate the given points
         var dataPt1, dataPt2;
 
-        if ((id1 in this.ialIdToDataMap) && (id2 in this.ialIdToDataMap)) {
-            dataPt1 = this.ialIdToDataMap[id1];
-            dataPt2 = this.ialIdToDataMap[id2];
+        if ((id1 in ial.ialIdToDataMap) && (id2 in ial.ialIdToDataMap)) {
+            dataPt1 = ial.ialIdToDataMap[id1];
+            dataPt2 = ial.ialIdToDataMap[id2];
         } else { return -1; }
 
         simScore = 0;
-        for (var attribute in this.attributeWeightVector) {
-            var currentAttrWeight = this.attributeWeightVector[attribute];
-            simScore += ((currentAttrWeight * 1.0 / this.activeAttributeCount) * ial.getNormalizedDistanceByAttribute(dataPt1, dataPt2, attribute));
+        for (var attribute in ial.attributeWeightVector) {
+            var currentAttrWeight = ial.attributeWeightVector[attribute];
+            simScore += ((currentAttrWeight * 1.0 / ial.activeAttributeCount) * ial.usermodel.getNormalizedDistanceByAttribute(dataPt1, dataPt2, attribute));
         }
 
         if (simScore > 1 || simScore < 0) { console.log("GetSimilarityScore: invalid score " + simScore); }
@@ -823,21 +828,21 @@
 
 
     /* get the normalized distance between the two items with the given ids for the given attribute */
-    ial.getNormalizedDistanceByAttribute = function(dataPoint1, dataPoint2, attribute) {
+    ial.usermodel.getNormalizedDistanceByAttribute = function(dataPoint1, dataPoint2, attribute) {
         var id1 = dataPoint1.ial.id;
         var id2 = dataPoint2.ial.id;
 
         // locate the given points
         var dataPt1, dataPt2;
 
-        if ((id1 in this.ialIdToDataMap) && (id2 in this.ialIdToDataMap)) {
-            dataPt1 = this.ialIdToDataMap[id1];
-            dataPt2 = this.ialIdToDataMap[id2];
+        if ((id1 in ial.ialIdToDataMap) && (id2 in ial.ialIdToDataMap)) {
+            dataPt1 = ial.ialIdToDataMap[id1];
+            dataPt2 = ial.ialIdToDataMap[id2];
         } else { return -1; }
 
         var attrVal1, attrVal2;
 
-        if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+        if (ial.attributeValueMap[attribute]['dataType'] == 'categorical') {
             attrVal1 = ial.getNormalizedAttributeValue(dataPt1[attribute],attribute);
             attrVal2 = ial.getNormalizedAttributeValue(dataPt2[attribute],attribute);
             if (attrVal1 == attrVal2) // attributes are the same, distance = 0
@@ -855,17 +860,17 @@
     /*
      * Returns a copy of the session logs collected so far
      * */
-    ial.getSessionLogs = function(){
-        return this.sessionLogs.slice(0);
+    ial.log.getSessionLogs = function(){
+        return ial.sessionLogs.slice(0);
     };
 
     /*
      * Returns the subset of logs which involve data items.
      * */
-    ial.getDataItemLogs = function(){
+    ial.log.getDataItemLogs = function(){
         var dataItemLogList = [];
-        for(var i in this.sessionLogs){
-            var logObj = this.sessionLogs[i];
+        for(var i in ial.sessionLogs){
+            var logObj = ial.sessionLogs[i];
             if(logObj.eventName.indexOf('ItemWeightChange')>-1){
                 dataItemLogList.push(logObj);
             }
@@ -878,10 +883,10 @@
     /*
      * Returns the subset of logs which involve attributes.
      * */
-    ial.getAttributeLogs = function () {
+    ial.log.getAttributeLogs = function () {
         var dataItemLogList = [];
-        for(var i in this.sessionLogs){
-            var logObj = this.sessionLogs[i];
+        for(var i in ial.sessionLogs){
+            var logObj = ial.sessionLogs[i];
             if(logObj.eventName.indexOf('AttributeWeightChange')>-1){
                 dataItemLogList.push(logObj);
             }
@@ -890,7 +895,7 @@
     };
 
 
-    function getVariance(arr) {
+    function getVariance(arr) { // * usermodel
 
         function getVariance(arr, mean) {
             return arr.reduce(function(pre, cur) {
@@ -922,9 +927,9 @@
     /*
      * Returns an attribute weight vector generated based on similarity between given points
      * */
-    ial.generateAttributeWeightVectorUsingSimilarity = function (points) {
-    	var minWeight = this.minWeight;
-    	var maxWeight = this.maxWeight;
+    ial.usermodel.generateAttributeWeightVectorUsingSimilarity = function (points) {
+    	var minWeight = ial.minWeight;
+    	var maxWeight = ial.maxWeight;
 
         // returns maxWeight-result since goal is to find similarity
         var getNormalizedAttributeWeightByVariance = function(variance,minVariance,maxVariance) {
@@ -943,8 +948,8 @@
         // creating a map with all values as lists against attributes (first step)
         for(var i in points){
             var d = points[i];
-            for(var attribute in this.attributeWeightVector){
-                var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+            for(var attribute in ial.attributeWeightVector){
+                var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
                 if( attribute in attributeValueListMap){
                     attributeValueListMap[attribute].push(val);
                 }else{
@@ -957,9 +962,9 @@
 
         // setting weights as variances (intermediate step)
         var minVariance = Number.MAX_VALUE,maxVariance = Number.MIN_VALUE;
-        for(var attribute in this.attributeWeightVector){
+        for(var attribute in ial.attributeWeightVector){
             //console.log("==================")
-            if(this.attributeValueMap[attribute]['dataType']!='categorical') {
+            if(ial.attributeValueMap[attribute]['dataType']!='categorical') {
                 tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
                 if(tempAttributeWeightVector[attribute]<minVariance){
                     minVariance = tempAttributeWeightVector[attribute];
@@ -979,14 +984,14 @@
         console.log(ial.utils.clone(tempAttributeWeightVector));
 
         // setting weights as normalized values between minWeight and maxWeight based on variances (final step)
-        for(var attribute in this.attributeWeightVector) {
-            if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
+        for(var attribute in ial.attributeWeightVector) {
+            if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') {
                 var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute],minVariance,maxVariance);
                 tempAttributeWeightVector[attribute] = normalizedAttributeWeight;
             }
         }
 
-        if(this.useNormalizedAttributeWeights==1){
+        if(ial.useNormalizedAttributeWeights==1){
             tempAttributeWeightVector = getNormalizedMap(tempAttributeWeightVector);
         }
 
@@ -995,7 +1000,7 @@
 
 
 
-    function getUniqueList(arr){
+    function getUniqueList(arr){ // * usermodel
         var uniqueList = [];
         for(var i in arr){
             if(uniqueList.indexOf(arr[i])==-1){
@@ -1008,7 +1013,7 @@
     /*
      * Returns an attribute weight vector generated based on difference between given points
      * */
-    ial.generateAttributeWeightVectorUsingDifferences = function (points1, points2) {
+    ial.usermodel.generateAttributeWeightVectorUsingDifferences = function (points1, points2) {
         var tempAttributeWeightVector = {};
         if (typeof points2 !== 'undefined' && points2.length>0) {
             var points1Avg = {}, points2Avg = {};
@@ -1018,16 +1023,16 @@
             // sum all the attribute values in points1
             for(var i in points1){
                 var d = points1[i];
-                for(var attribute in this.attributeWeightVector){
-                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
-                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                for(var attribute in ial.attributeWeightVector){
+                    if(ial.attributeValueMap[attribute]['dataType']!='categorical'){
+                        var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
                         if(points1Avg.hasOwnProperty(attribute)) {
                             points1Avg[attribute] += val;
                         } else{
                             points1Avg[attribute] = val;
                         }
                     } else{
-                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
                         if(points1CatMap.hasOwnProperty(attribute)){
                             if(points1CatMap[attribute].hasOwnProperty(val)){
                                 points1CatMap[attribute][val]++;
@@ -1045,7 +1050,7 @@
 
             // compute the average for each attribute in points1
             for(var attribute in points1Avg){
-                if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                if(ial.attributeValueMap[attribute]['dataType']!='categorical'){
                     points1Avg[attribute] = points1Avg[attribute] / points1Len;
                 } else{
                     var catMax = Math.MIN_VALUE;
@@ -1063,16 +1068,16 @@
             // sum all the attribute values in points2
             for(var i in points2){
                 var d = points2[i];
-                for(var attribute in this.attributeWeightVector){
-                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
-                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                for(var attribute in ial.attributeWeightVector){
+                    if(ial.attributeValueMap[attribute]['dataType']!='categorical'){
+                        var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
                         if(points2Avg.hasOwnProperty(attribute)) {
                             points2Avg[attribute] += val;
                         } else{
                             points2Avg[attribute] = val;
                         }
                     } else{
-                        var val = this.getNormalizedAttributeValue(d[attribute],attribute);
+                        var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
                         if(points2CatMap.hasOwnProperty(attribute)){
                             if(points2CatMap[attribute].hasOwnProperty(val)){
                                 points2CatMap[attribute][val]++;
@@ -1090,7 +1095,7 @@
 
             // compute the average for each attribute in points2
             for(var attribute in points2Avg){
-                if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                if(ial.attributeValueMap[attribute]['dataType']!='categorical'){
                     points2Avg[attribute] = points2Avg[attribute] / points2Len;
                 } else{
                     var catMax = Math.MIN_VALUE;
@@ -1108,7 +1113,7 @@
             var difference = {};
             for(var attribute in points1Avg){
                 if(points2Avg.hasOwnProperty(attribute)){
-                    if(this.attributeValueMap[attribute]['dataType']!='categorical'){
+                    if(ial.attributeValueMap[attribute]['dataType']!='categorical'){
                         difference[attribute] = points1Avg[attribute] - points2Avg[attribute];
                     }else {
                         if(points1Avg[attribute] == points2Avg[attribute]){
@@ -1124,7 +1129,7 @@
 
         } else {
         	console.log("Error: points undefined.");
-        	return this.attributeWeightVector;
+        	return ial.attributeWeightVector;
         }
 
         return tempAttributeWeightVector;
@@ -1136,14 +1141,14 @@
      * --------------------
      * */
 
-    ial.createClusters = function(dataItems, knnDistance) {
-        dataItems = typeof dataItems !== 'undefined' ? dataItems : this.dataSet;
+    ial.analytics.createClusters = function(dataItems, knnDistance) {
+        dataItems = typeof dataItems !== 'undefined' ? dataItems : ial.dataSet;
         knnDistance = typeof knnDistance !== 'undefined' ? knnDistance : 0.05;
-        this.clusters = this.classify(dataItems, knnDistance);
-        return this.clusters;
+        ial.clusters = ial.analytics.classify(dataItems, knnDistance);
+        return ial.clusters;
     };
 
-    ial.classify = function(dataPoints, knnDistance) {
+    ial.analytics.classify = function(dataPoints, knnDistance) {
         var aggregateScores = [];
 
         var tempStringId = 10,
@@ -1155,12 +1160,12 @@
             aggregateScores[index]["ial"] = {};
             aggregateScores[index]["ial"]["id"] = dataPoints[index]["ial"]["id"];
             aggregateScores[index]["ial"]["aggregateScore"] = 0;
-            for (var attributeName in this.attributeWeightVector) {
+            for (var attributeName in ial.attributeWeightVector) {
                 var attributeValue = ial.getNormalizedAttributeValue(dataPoints[index][attributeName],attributeName);
-                var attributeWeight = this.attributeWeightVector[attributeName];
+                var attributeWeight = ial.attributeWeightVector[attributeName];
 
                 if(attributeName!='ial'){
-                    if(this.attributeValueMap[attributeName]['dataType']=='categorical'){
+                    if(ial.attributeValueMap[attributeName]['dataType']=='categorical'){
                         if (Object.keys(tempStringValMap).indexOf(attributeValue) == -1) { // if string not found in tempStringValMap i.e. is a new category string
                             tempStringValMap[attributeValue] = tempStringId;
                             attributeValue = tempStringId;
@@ -1196,13 +1201,13 @@
                 var currentObject = aggregateScores[index];
 
                 if (Math.abs(currentObject["ial"]["aggregateScore"] - previousObject["ial"]["aggregateScore"]) <= knnDistance) {
-                    var curDataObj = this.ialIdToDataMap[currentObject["ial"]['id']];
+                    var curDataObj = ial.ialIdToDataMap[currentObject["ial"]['id']];
                     curDataObj.ial.KNNClusterId = cluster.getClusterId();
                     cluster.addDataItem(curDataObj);
                 } else {
                     clusterIndex += 1;
                     var cluster = new Cluster(clusterIndex);
-                    var curDataObj = this.ialIdToDataMap[aggregateScores[index]["ial"]['id']];
+                    var curDataObj = ial.ialIdToDataMap[aggregateScores[index]["ial"]['id']];
                     curDataObj.ial.KNNClusterId = cluster.getClusterId();
                     cluster.addDataItem(curDataObj);
                     clusters.push(cluster);
@@ -1216,7 +1221,7 @@
      * Cluster data structure
      * */
 
-    var Cluster = function(id) {
+    var Cluster = function(id) { // * analytics
         this.clusterId = id;
         this.clusterLabel = "";
         this.dataItems = [];
@@ -1252,7 +1257,7 @@
      * Log object data structure
      * */
 
-    var LogObj = function (d,tStamp) {
+    var LogObj = function (d,tStamp) { // * log
         d = typeof d !== 'undefined' ? d : '';
 
         this.dataItem = d;
@@ -1293,82 +1298,82 @@
      * Interaction and attribute weight vector queue utilities
      * */
 
-    ial.setMaxQueueSize = function(newQueueSize) {
-        this.maxQueueSize = newQueueSize; 
+    ial.log.setMaxQueueSize = function(newQueueSize) {
+        ial.maxQueueSize = newQueueSize; 
     }
 
-    ial.getInteractionQueue = function() {
-        return this.interactionQueue;
+    ial.log.getInteractionQueue = function() {
+        return ial.interactionQueue;
     }
 
 // print the contents of the interaction queue
-    ial.printInteractionQueue = function() {
-        console.log("Printing Interaction Queue (" + this.interactionQueue.length + "): ");
-        for (var i in this.interactionQueue) console.log(this.interactionQueue[i]);
+    ial.log.printInteractionQueue = function() {
+        console.log("Printing Interaction Queue (" + ial.interactionQueue.length + "): ");
+        for (var i in ial.interactionQueue) console.log(ial.interactionQueue[i]);
     }
 
-    ial.interactionEnqueue = function(obj) {
+    ial.log.interactionEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        if (this.interactionQueue.length >= this.maxQueueSize) {
+        if (ial.interactionQueue.length >= ial.maxQueueSize) {
             console.log("Max queue size reached");
-            ial.interactionDequeue();
+            ial.log.interactionDequeue();
         }
-        this.interactionQueue.push(obj);
+        ial.interactionQueue.push(obj);
     }
 
-    ial.interactionDequeue = function() {
-        return this.interactionQueue.shift(); 
+    ial.log.interactionDequeue = function() {
+        return ial.interactionQueue.shift(); 
     }
 
-    ial.getAttributeWeightVectorQueue = function() {
-        return this.attributeWeightVectorQueue;
+    ial.log.getAttributeWeightVectorQueue = function() {
+        return ial.attributeWeightVectorQueue;
     }
 
 // print the contents of the interaction queue
-    ial.printAttributeWeightVectorQueue = function() {
-        console.log("Printing Attribute Weight Vector Queue (" + this.attributeWeightVectorQueue.length + "): ");
-        for (var i in this.attributeWeightVectorQueue) console.log(this.attributeWeightVectorQueue[i]);
+    ial.log.printAttributeWeightVectorQueue = function() {
+        console.log("Printing Attribute Weight Vector Queue (" + ial.attributeWeightVectorQueue.length + "): ");
+        for (var i in ial.attributeWeightVectorQueue) console.log(ial.attributeWeightVectorQueue[i]);
     }
 
-    ial.attributeWeightVectorEnqueue = function(obj) {
+    ial.log.attributeWeightVectorEnqueue = function(obj) {
         if (typeof obj === 'undefined' || obj == null) return;
 
-        if (this.attributeWeightVectorQueue.length >= this.maxQueueSize) {
+        if (ial.attributeWeightVectorQueue.length >= ial.maxQueueSize) {
             console.log("Max queue size reached"); 
-            ial.attributeWeightVectorDequeue();
+            ial.log.attributeWeightVectorDequeue();
         }
-        this.attributeWeightVectorQueue.push(obj);
+        ial.attributeWeightVectorQueue.push(obj);
     }
 
-    ial.attributeWeightVectorDequeue = function() {
-        return this.attributeWeightVectorQueue.shift(); 
+    ial.log.attributeWeightVectorDequeue = function() {
+        return ial.log.attributeWeightVectorQueue.shift(); 
     }
 
 // private
 // time arg can be a Date object; returns all interactions that occurred since 'time'
 // time arg can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
-    function getInteractionQueueSubset(time, interactionTypes) {
-        this.interactionQueue = ial.utils.clone(ial.getInteractionQueue());
+    function getInteractionQueueSubset(time, interactionTypes) { // * log
+        ial.interactionQueue = ial.utils.clone(ial.log.getInteractionQueue());
         var interactionSubset = [];
 
-        if (typeof time === 'undefined') time = this.interactionQueue.length;
+        if (typeof time === 'undefined') time = ial.interactionQueue.length;
 
         if (time instanceof Date) {
-            for (var i = 0; i < this.interactionQueue.length; i++) {
-                var curLog = this.interactionQueue[i];
+            for (var i = 0; i < ial.interactionQueue.length; i++) {
+                var curLog = ial.interactionQueue[i];
                 var curTime = curLog.eventTimeStamp;
                 var curEventType = curLog['customLogInfo']['eventType'];
                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1))
-                    interactionSubset.push(this.interactionQueue[i]);
+                    interactionSubset.push(ial.interactionQueue[i]);
             }
         } else if (!isNaN(parseInt(time))) {
-            if (time > this.interactionQueue.length) time = this.interactionQueue.length;
+            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
             var numLogs = 0;
-            var i = this.interactionQueue.length - 1;
+            var i = ial.interactionQueue.length - 1;
             while (i >= 0 && numLogs <= time) {
-                var curLog = this.interactionQueue[i];
+                var curLog = ial.interactionQueue[i];
                 var curEventType = curLog['customLogInfo']['eventType'];
                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
                     interactionSubset.push(curLog);
@@ -1385,16 +1390,16 @@
 // 'time' can be a Date object; returns all interactions that occurred since 'time'
 // 'time' can be an integer; returns the last 'time' interactions
 // interactionTypes defines which types of interactions to consider
-    function getInteractionQueueSubsetByEventType(time, interactionTypes) {
+    function getInteractionQueueSubsetByEventType(time, interactionTypes) { // * log
         var interactionSubsetQueues = {};
-        this.interactionQueue = ial.getInteractionQueue(); 
+        ial.interactionQueue = ial.log.getInteractionQueue(); 
 
-        if (typeof time === 'undefined') time = this.interactionQueue.length;
+        if (typeof time === 'undefined') time = ial.interactionQueue.length;
 
         if (time instanceof Date) {
             interactionSubsetQueues = {};
-            for (var i = 0; i < this.interactionQueue.length; i++) {
-                var curLog = this.interactionQueue[i];
+            for (var i = 0; i < ial.interactionQueue.length; i++) {
+                var curLog = ial.interactionQueue[i];
                 var curTime = curLog.eventTimeStamp;
                 var curEventType = curLog.customLogInfo.eventType;
                 if (curEventType === 'undefined') curEventType = 'uncategorized';
@@ -1408,11 +1413,11 @@
             }
         } else if (!isNaN(parseInt(time))) {
             interactionSubsetQueues = {};
-            if (time > this.interactionQueue.length) time = this.interactionQueue.length;
+            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
             var i = 0;
             var numLogs = 0;
-            while (i < this.interactionQueue.length && numLogs <= time) {
-                var curLog = this.interactionQueue[i];
+            while (i < ial.interactionQueue.length && numLogs <= time) {
+                var curLog = ial.interactionQueue[i];
                 var curEventType = curLog.customLogInfo.eventType;
                 if (curEventType === 'undefined') curEventType = 'uncategorized';
                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
@@ -1434,16 +1439,16 @@
  // 'time' can be a Date object; returns all interactions that occurred since 'time'
  // 'time' can be an integer; returns the last 'time' interactions
  // interactionTypes defines which types of interactions to consider
-     function getInteractionQueueSubsetByDataPoint(time, interactionTypes) {
+     function getInteractionQueueSubsetByDataPoint(time, interactionTypes) { // * log
          var interactionSubsetQueues = {};
-         this.interactionQueue = ial.getInteractionQueue(); 
+         ial.interactionQueue = ial.log.getInteractionQueue(); 
 
-         if (typeof time === 'undefined') time = this.interactionQueue.length;
+         if (typeof time === 'undefined') time = ial.interactionQueue.length;
 
          if (time instanceof Date) {
              interactionSubsetQueues = {};
-             for (var i = 0; i < this.interactionQueue.length; i++) {
-                 var curLog = this.interactionQueue[i];
+             for (var i = 0; i < ial.interactionQueue.length; i++) {
+                 var curLog = ial.interactionQueue[i];
                  var curTime = curLog.eventTimeStamp;
                  var curData = curLog.dataItem;
                  var curEventType = curLog.customLogInfo.eventType;
@@ -1458,11 +1463,11 @@
              }
          } else if (!isNaN(parseInt(time))) {
              interactionSubsetQueues = {};
-             if (time > this.interactionQueue.length) time = this.interactionQueue.length;
+             if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
              var i = 0;
              var numLogs = 0;
-             while (i < this.interactionQueue.length && numLogs <= time) {
-                 var curLog = this.interactionQueue[i];
+             while (i < ial.interactionQueue.length && numLogs <= time) {
+                 var curLog = ial.interactionQueue[i];
                  var curData = curLog.dataItem;
                  var curEventType = curLog.customLogInfo.eventType;
                  if (curEventType === 'undefined') curEventType = 'uncategorized';
@@ -1484,22 +1489,22 @@
 // private
 // arg can be a Date object; returns all interactions that occurred since 'time'
 // arg can be an integer; returns the last 'time' interactions
-    function getWeightVectorQueueSubset(time) {
-        this.attributeWeightVectorQueue = ial.getAttributeWeightVectorQueue();
-        var weightVectorSubset = ial.getAttributeWeightVectorQueue();
+    function getWeightVectorQueueSubset(time) { // * log
+        ial.attributeWeightVectorQueue = ial.log.getAttributeWeightVectorQueue();
+        var weightVectorSubset = ial.log.getAttributeWeightVectorQueue();
 
         if (typeof time !== 'undefined') {
             if (time instanceof Date) {
                 weightVectorSubset = [];
-                for (var i = 0; i < this.attributeWeightVectorQueue.length; i++) {
-                    var curTime = this.attributeWeightVectorQueue[i].eventTimeStamp;
-                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(this.attributeWeightVectorQueue[i]);
+                for (var i = 0; i < ial.attributeWeightVectorQueue.length; i++) {
+                    var curTime = ial.attributeWeightVectorQueue[i].eventTimeStamp;
+                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
                 }
             } else if (!isNaN(parseInt(time))) {
                 weightVectorSubset = [];
-                if (time > this.attributeWeightVectorQueue.length) time = this.attributeWeightVectorQueue.length;
+                if (time > ial.attributeWeightVectorQueue.length) time = ial.attributeWeightVectorQueue.length;
                 for (var i = 0; i < time; i++)
-                    weightVectorSubset.push(this.attributeWeightVectorQueue[i]);
+                    weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
             }
         }
 
@@ -1509,7 +1514,7 @@
 // private
 // computes variance for numerical attributes and entropy for categorical attributes
 // entropy ref: http://www.cs.rochester.edu/u/james/CSC248/Lec6.pdf
-    function computeAttributeVariance(data, attr) {
+    function computeAttributeVariance(data, attr) { // * usermodel.bias
         data = getArray(data);
         var attributeValueMap = ial.getAttributeValueMap();
         if (attributeValueMap[attr].dataType == 'categorical') {
@@ -1547,7 +1552,7 @@
 
 // private
 // computes distribution of categorical attribute values
-    function computeCategoricalDistribution(data, attr) {
+    function computeCategoricalDistribution(data, attr) { // * usermodel.bias
         data = getArray(data);
         var attributeValueMap = ial.getAttributeValueMap();
         var distribution = {};
@@ -1562,35 +1567,35 @@
     }
 
 // make sure you're dealing with an array
-    function getArray(arrayLike) {
+    function getArray(arrayLike) { // * usermodel.bias
         let arr = Array.from(arrayLike);
         return arr;
     }
 
 // returns the current queue of bias logs
-    ial.getBiasLogs = function() {
-        return ial.utils.clone(this.biasLogs);
+    ial.usermodel.bias.getBiasLogs = function() {
+        return ial.utils.clone(ial.biasLogs);
     }
 
 // print bias logs to console
-    ial.printBiasLogs = function() {
+    ial.usermodel.bias.printBiasLogs = function() {
         // print data
-        console.log("dataset", this.dataSet);
+        console.log("dataset", ial.dataSet);
 
         // print attribute information
-        console.log("attributes", this.getAttributeValueMap());
+        console.log("attributes", ial.getAttributeValueMap());
 
         // iterate through queue
-        console.log("# bias logs: " + this.biasLogs.length);
-        for (var i = 0; i < this.biasLogs.length; i++) console.log("bias log", this.biasLogs[i]);
+        console.log("# bias logs: " + ial.biasLogs.length);
+        for (var i = 0; i < ial.biasLogs.length; i++) console.log("bias log", ial.biasLogs[i]);
 
         // print individual interaction records
-        console.log("# interaction logs: " + this.interactionQueue.length);
-        for (var i = 0; i < this.interactionQueue.length; i++) console.log("interaction log", this.interactionQueue[i]);
+        console.log("# interaction logs: " + ial.interactionQueue.length);
+        for (var i = 0; i < ial.interactionQueue.length; i++) console.log("interaction log", ial.interactionQueue[i]);
 
         // print attribute weight change records
-        console.log("# attribute weight logs: " + this.attributeWeightVectorQueue.length);
-        for (var i = 0; i < this.attributeWeightVectorQueue.length; i++) console.log("attribute weight log", this.attributeWeightVectorQueue[i]);
+        console.log("# attribute weight logs: " + ial.attributeWeightVectorQueue.length);
+        for (var i = 0; i < ial.attributeWeightVectorQueue.length; i++) console.log("attribute weight log", ial.attributeWeightVectorQueue[i]);
     }
 
 
@@ -1605,27 +1610,25 @@
 	// interactionTypes (optional) can specify to only compute bias on particular types of interaction (based on eventType key in customLogInfo)
     // numQuantiles (optional) number of quantiles to divide numerical attributes into (default is 4)
 	// returns true if bias is detected, false otherwise
-    ial.computeBias = function(metric, time, interactionTypes) {
+    ial.usermodel.bias.computeBias = function(metric, time, interactionTypes) {
     	var numQuantiles = 4;
     	if (typeof metric !== 'undefined') {
-        	if (metric == this.BIAS_DATA_POINT_COVERAGE) return ial.computeDataPointCoverage(time, interactionTypes);
-        	else if (metric == this.BIAS_DATA_POINT_DISTRIBUTION) return ial.computeDataPointDistribution(time, interactionTypes);
-        	else if (metric == this.BIAS_ATTRIBUTE_COVERAGE) return ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
-        	else if (metric == this.BIAS_ATTRIBUTE_DISTRIBUTION) return ial.computeAttributeDistribution(time, interactionTypes);
-        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE) return ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
-        	else if (metric == this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION) return ial.computeAttributeWeightDistribution(time, interactionTypes);
-        	// else if (metric == this.BIAS_SCREEN_TIME) return ial.computeScreenTimeBias();
-        	else return ial.computeDataPointCoverage(time, interactionTypes);
+        	if (metric == ial.BIAS_DATA_POINT_COVERAGE) return ial.usermodel.bias.computeDataPointCoverage(time, interactionTypes);
+        	else if (metric == ial.BIAS_DATA_POINT_DISTRIBUTION) return ial.usermodel.bias.computeDataPointDistribution(time, interactionTypes);
+        	else if (metric == ial.BIAS_ATTRIBUTE_COVERAGE) return ial.usermodel.bias.computeAttributeCoverage(time, interactionTypes, numQuantiles);
+        	else if (metric == ial.BIAS_ATTRIBUTE_DISTRIBUTION) return ial.usermodel.bias.computeAttributeDistribution(time, interactionTypes);
+        	else if (metric == ial.BIAS_ATTRIBUTE_WEIGHT_COVERAGE) return ial.usermodel.bias.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
+        	else if (metric == ial.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION) return ial.usermodel.bias.computeAttributeWeightDistribution(time, interactionTypes);
+        	else return ial.usermodel.bias.computeDataPointCoverage(time, interactionTypes);
         } else {
-            var numMetrics = this.BIAS_TYPES.length;
+            var numMetrics = ial.BIAS_TYPES.length;
             var biasResultMap = {};
-            var dataPointCoverage = ial.computeDataPointCoverage(time, interactionTypes);
-            var dataPointDistribution = ial.computeDataPointDistribution(time, interactionTypes);
-            var attributeCoverage = ial.computeAttributeCoverage(time, interactionTypes, numQuantiles);
-            var attributeDistribution = ial.computeAttributeDistribution(time, interactionTypes);
-            var attributeWeightCoverage = ial.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
-            var attributeWeightDistribution = ial.computeAttributeWeightDistribution(time, interactionTypes);
-            //var screenTimeBias = ial.computeScreenTimeBias();
+            var dataPointCoverage = ial.usermodel.bias.computeDataPointCoverage(time, interactionTypes);
+            var dataPointDistribution = ial.usermodel.bias.computeDataPointDistribution(time, interactionTypes);
+            var attributeCoverage = ial.usermodel.bias.computeAttributeCoverage(time, interactionTypes, numQuantiles);
+            var attributeDistribution = ial.usermodel.bias.computeAttributeDistribution(time, interactionTypes);
+            var attributeWeightCoverage = ial.usermodel.bias.computeAttributeWeightCoverage(time, interactionTypes, numQuantiles);
+            var attributeWeightDistribution = ial.usermodel.bias.computeAttributeWeightDistribution(time, interactionTypes);
             
             biasResultMap['data_point_coverage'] = dataPointCoverage;
             biasResultMap['data_point_distribution'] = dataPointDistribution;
@@ -1633,7 +1636,6 @@
             biasResultMap['attribute_distribution'] = attributeDistribution;
             biasResultMap['attribute_weight_coverage'] = attributeWeightCoverage;
             biasResultMap['attribute_weight_distribution'] = attributeWeightDistribution;
-            //biasResultMap['screen_time_metric'] = screenTimeBias;
 
             var avgLevel = 0;
             avgLevel += parseFloat(dataPointCoverage['metric_level']);
@@ -1656,11 +1658,11 @@
 	// metric = 1 - min[1, (# unique data items interacted with) / (expected # unique data points interacted with)]
 	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-    ial.computeDataPointCoverage = function(time, interactionTypes) {
+    ial.usermodel.bias.computeDataPointCoverage = function(time, interactionTypes) {
         var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
         var currentLog = {};
-        currentLog['bias_type'] = this.BIAS_DATA_POINT_COVERAGE;
+        currentLog['bias_type'] = ial.BIAS_DATA_POINT_COVERAGE;
         currentLog['current_time'] = new Date();
         currentLog['number_of_logs'] = interactionSubset.length;
         currentLog['interaction_types'] = interactionTypes;
@@ -1673,7 +1675,7 @@
             idSet.add(interactionSubset[i].dataItem.ial.id);
         
         // compute expected number of unique data items based on total # of interactions
-        var expectedUnique = ial.utils.getMarkovExpectedValue(this.dataSet.length, interactionSubset.length);
+        var expectedUnique = ial.utils.getMarkovExpectedValue(ial.dataSet.length, interactionSubset.length);
 
         var percentUnique = idSet.size / expectedUnique;
 
@@ -1688,7 +1690,7 @@
         // lower percent of unique interactions -> higher level of bias
         currentLog['metric_level'] = 1.0 - Math.min(1, percentUnique);
 
-        this.biasLogs.push(currentLog);
+        ial.biasLogs.push(currentLog);
         return currentLog;
     }
 
@@ -1696,13 +1698,13 @@
 	// metric = 1 - p, where p is defined as the probability of the Chi^2-statistic, and Chi^2 = (observed - expected)^2 / expected
 	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	ial.computeDataPointDistribution = function(time, interactionTypes) {
+	ial.usermodel.bias.computeDataPointDistribution = function(time, interactionTypes) {
     	var origInteractionSubset = getInteractionQueueSubset(time, interactionTypes);
         var interactionSubsetByData = getInteractionQueueSubsetByDataPoint(time, interactionTypes);
 
         var currentLog = {};
         var curDate = new Date();
-        currentLog['bias_type'] = this.BIAS_DATA_POINT_DISTRIBUTION;
+        currentLog['bias_type'] = ial.BIAS_DATA_POINT_DISTRIBUTION;
         currentLog['current_time'] = new Date();
         currentLog['number_of_logs'] = origInteractionSubset.length;
         currentLog['interaction_types'] = interactionTypes;
@@ -1721,10 +1723,10 @@
         
         // compare observed and expected number of interactions for each data point
         var maxObs = 0; 
-        var expected = origInteractionSubset.length / this.dataSet.length;
+        var expected = origInteractionSubset.length / ial.dataSet.length;
         var chiSq = 0;
-        for (var i = 0; i < this.dataSet.length; i++) {
-        	var curData = this.dataSet[i];
+        for (var i = 0; i < ial.dataSet.length; i++) {
+        	var curData = ial.dataSet[i];
         	var observed = 0; 
         	if (interactionSubsetByData.hasOwnProperty(curData.ial.id))
         		observed = interactionSubsetByData[curData.ial.id].length;
@@ -1734,7 +1736,7 @@
         	chiSq += sqDiff;
         }
         	
-        var degFree = this.dataSet.length - 1;
+        var degFree = ial.dataSet.length - 1;
         var prob = getChiSquarePercent(chiSq, degFree);
         currentLogInfo['chi_squared'] = chiSq;
         currentLogInfo['degrees_of_freedom'] = degFree;
@@ -1742,7 +1744,7 @@
         currentLog['info'] = currentLogInfo;
         currentLog['metric_level'] = prob;
 
-        this.biasLogs.push(currentLog);
+        ial.biasLogs.push(currentLog);
         return currentLog;
     }
 	
@@ -1752,12 +1754,12 @@
 	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	// numQuantiles (optional) number of quantiles to divide numerical attributes into
-    ial.computeAttributeCoverage = function(time, interactionTypes, numQuantiles) {
+    ial.usermodel.bias.computeAttributeCoverage = function(time, interactionTypes, numQuantiles) {
     	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
     	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_COVERAGE;
+    	currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_COVERAGE;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = interactionSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -1767,14 +1769,14 @@
 
     	// compare interactions to quantiles
     	var maxMetricValue = 0; 
-    	for (var attribute in this.attributeValueMap) {
-    		fullDist = this.attributeValueMap[attribute]['distribution'];
-    		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+    	for (var attribute in ial.attributeValueMap) {
+    		fullDist = ial.attributeValueMap[attribute]['distribution'];
+    		if (ial.attributeValueMap[attribute]['dataType'] == 'numeric') {
     			var quantiles = {};
     			var quantileList = [];
     			for (var i = 0; i < numQuantiles; i++) {
     				if (i != numQuantiles - 1)
-    					quantVal = fullDist[Math.floor((i + 1) * this.dataSet.length / numQuantiles) - 1];
+    					quantVal = fullDist[Math.floor((i + 1) * ial.dataSet.length / numQuantiles) - 1];
     				else
     					quantVal = fullDist[fullDist.length - 1];
     				quantileList.push(quantVal);
@@ -1815,7 +1817,7 @@
     			var metricVal = 1.0 - Math.min(1, percentUnique);
     			if (metricVal > maxMetricValue) maxMetricValue = metricVal; 
     			currentLogInfo['attribute_vector'][attribute]['metric_level'] = metricVal;
-    		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+    		} else if (ial.attributeValueMap[attribute]['dataType'] == 'categorical') {
     			var quantiles = {};
     			var quantileList = Object.keys(fullDist);
     	
@@ -1859,7 +1861,7 @@
     	// in this case, the metric level is the max metric value over all the attributes
     	currentLog['metric_level'] = maxMetricValue;
 
-    	this.biasLogs.push(currentLog);
+    	ial.biasLogs.push(currentLog);
     	return currentLog;
     }
     
@@ -1869,11 +1871,11 @@
     // KS = largest difference in observed and expected cdf curves
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	ial.computeAttributeDistribution = function(time, interactionTypes) {
+	ial.usermodel.bias.computeAttributeDistribution = function(time, interactionTypes) {
     	var interactionSubset = getInteractionQueueSubset(time, interactionTypes);
 
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_DISTRIBUTION;
+    	currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_DISTRIBUTION;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = interactionSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -1890,9 +1892,9 @@
 
     	// compare interactions to full distribution of each attribute
     	var maxMetricVal = 0;
-    	for (var attribute in this.attributeValueMap) {
-    		fullDist = this.attributeValueMap[attribute]['distribution'];
-    		if (this.attributeValueMap[attribute]['dataType'] == 'numeric') {
+    	for (var attribute in ial.attributeValueMap) {
+    		fullDist = ial.attributeValueMap[attribute]['distribution'];
+    		if (ial.attributeValueMap[attribute]['dataType'] == 'numeric') {
     			// figure out distribution of interactions
     			var intDist = [];
     			for (var i = 0; i < interactionSubset.length; i++) {
@@ -1908,7 +1910,7 @@
     			currentLogInfo['attribute_vector'][attribute]['ks'] = KS['ks'];
     			currentLogInfo['attribute_vector'][attribute]['d'] = KS['d'];
     			currentLogInfo['attribute_vector'][attribute]['metric_level'] = 1 - KS['p']; 
-    		} else if (this.attributeValueMap[attribute]['dataType'] == 'categorical') {
+    		} else if (ial.attributeValueMap[attribute]['dataType'] == 'categorical') {
     			var quantiles = {};
     			var quantileList = Object.keys(fullDist);
     			var chiSq = 0;
@@ -1928,7 +1930,7 @@
     			var coveredQuantiles = 0; 
     			for (var i = 0; i < quantileList.length; i++) {
     				var quantVal = quantileList[i];
-    				var expectedCount = interactionSubset.length * fullDist[quantVal] / this.dataSet.length;
+    				var expectedCount = interactionSubset.length * fullDist[quantVal] / ial.dataSet.length;
     				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal] = {};
     				currentLogInfo['attribute_vector'][attribute]['quantile_distribution'][quantVal]['expected_count'] = expectedCount; 
         			var obsCount = 0;
@@ -1951,7 +1953,7 @@
     	currentLog['info'] = currentLogInfo;
     	currentLog['metric_level'] = maxMetricVal;
 
-    	this.biasLogs.push(currentLog);
+    	ial.biasLogs.push(currentLog);
     	return currentLog;
     }
     
@@ -1961,12 +1963,12 @@
 	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	// numQuantiles (optional) number of quantiles to divide weights into
-    ial.computeAttributeWeightCoverage = function(time, interactionTypes, numQuantiles) {
+    ial.usermodel.bias.computeAttributeWeightCoverage = function(time, interactionTypes, numQuantiles) {
     	numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
     	var weightVectorSubset = getWeightVectorQueueSubset(time);
 
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT_COVERAGE;
+    	currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_WEIGHT_COVERAGE;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = weightVectorSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -1976,7 +1978,7 @@
     	
     	var quantileMap = {}; // for counting number of weights that occur in each quantile
     	var changeMap = {}; // for counting number of times each attribute's weight actually changes with each new vector
-    	for (var attribute in this.attributeValueMap) {
+    	for (var attribute in ial.attributeValueMap) {
     		quantileMap[attribute] = {};
     		changeMap[attribute] = 1;
     	}
@@ -1986,11 +1988,11 @@
     	for (var i = 0; i < numQuantiles; i++) { 
     		var quantVal;
 			if (i != numQuantiles - 1)
-				quantVal = this.minWeight + (i + 1) * (this.maxWeight - this.minWeight) / numQuantiles;
+				quantVal = ial.minWeight + (i + 1) * (ial.maxWeight - ial.minWeight) / numQuantiles;
 			else
-				quantVal = this.maxWeight;
+				quantVal = ial.maxWeight;
 			quantileList.push(quantVal);
-			for (var attribute in this.attributeValueMap)
+			for (var attribute in ial.attributeValueMap)
 				quantileMap[attribute][quantVal] = 0;
 		}
 
@@ -2001,7 +2003,7 @@
 			var oldVector = curWeightVector.oldWeight;
             var newVector = curWeightVector.newWeight;
             
-            for (var attribute in this.attributeValueMap) {
+            for (var attribute in ial.attributeValueMap) {
             	// count which quantile the weight falls in
             	// if it's the first weight vector, check old vector and new vector
             	var attrWeight;
@@ -2026,7 +2028,7 @@
 		
 		// compute metric values
 		var maxMetricValue = 0;
-		for (var attribute in this.attributeValueMap) {
+		for (var attribute in ial.attributeValueMap) {
 			currentLogInfo['attribute_vector'][attribute] = {};
 			currentLogInfo['attribute_vector'][attribute]['quantiles'] = quantileList;
 			currentLogInfo['attribute_vector'][attribute]['quantile_coverage'] = {};
@@ -2058,7 +2060,7 @@
     	// in this case, the metric level is the max metric value over all the attributes
     	currentLog['metric_level'] = maxMetricValue;
 
-    	this.biasLogs.push(currentLog);
+    	ial.biasLogs.push(currentLog);
     	return currentLog;
     }
     
@@ -2067,11 +2069,11 @@
     // KS = largest difference in observed and expected curves
  	// time (optional) the time frame of interactions to consider (defaults to all logged interactions)
 	// interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
-	ial.computeAttributeWeightDistribution = function(time, interactionTypes) {
+	ial.usermodel.bias.computeAttributeWeightDistribution = function(time, interactionTypes) {
 		var weightVectorSubset = getWeightVectorQueueSubset(time);
 
     	var currentLog = {};
-    	currentLog['bias_type'] = this.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION;
+    	currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION;
     	currentLog['current_time'] = new Date();
     	currentLog['number_of_logs'] = weightVectorSubset.length;
     	currentLog['interaction_types'] = interactionTypes;
@@ -2088,14 +2090,14 @@
 
     	// exponential distribution sampled N+1 times between 0 and (max weight - min weight)
         var expDistr = [];
-        for (var i = 0; i <= this.dataSet.length; i++) {
-        	var xVal = i * Math.abs(this.maxWeight - this.minWeight) / this.dataSet.length;
+        for (var i = 0; i <= ial.dataSet.length; i++) {
+        	var xVal = i * Math.abs(ial.maxWeight - ial.minWeight) / ial.dataSet.length;
         	expDistr.push(Math.exp(-1 * xVal));
         }
         
         // compute the distributions of delta weight (change in weight)
         var weightDistr = {};
-        for (var attribute in this.attributeValueMap) {
+        for (var attribute in ial.attributeValueMap) {
         	var curDistr = [];
         	for (var i = 0; i < weightVectorSubset.length; i++)
         		curDistr.push(Math.abs(weightVectorSubset[i].newWeight[attribute] - weightVectorSubset[i].oldWeight[attribute]));
@@ -2104,7 +2106,7 @@
         
         // compare delta weight distributions to exponential distribution
     	var maxMetricVal = 0;
-    	for (var attribute in this.attributeValueMap) {
+    	for (var attribute in ial.attributeValueMap) {
     		var KS = { ks: undefined, d: undefined, p: 1 };
     		if (weightDistr[attribute] > 0)
     			KS = getKSPercent(new Vector(expDistr), new Vector(weightDistr[attribute]));
@@ -2121,68 +2123,11 @@
     	currentLog['info'] = currentLogInfo;
     	currentLog['metric_level'] = maxMetricVal;
 
-    	this.biasLogs.push(currentLog);
+    	ial.biasLogs.push(currentLog);
     	return currentLog;
     }
 
-	// the screen time metric relates to how long each data item is visible on the screen
-    // metric(n) = 1- p, where p is defined as the probability of the Z-statistic (number of standard deviations from the mean)
-    ial.computeScreenTimeBias = function() {
-    	 var currentLog = {};
-         currentLog['bias_type'] = this.BIAS_SCREEN_TIME;
-         currentLog['current_time'] = new Date();
-         currentLog['number_of_logs'] = this.dataSet.length;
-         var currentLogInfo = {};
-         
-         // TODO: We aren't currently tracking screen time -- for now, return an empty log
-         currentLog['info'] = currentLogInfo; 
-         currentLog['metric_level'] = 0;
-         return currentLog;
-         
-         
-         
-   
-         
-    	 // compute average screen time
-    	 var avgTime = 0;
-    	 for (var index in this.dataSet) 
-    		 avgTime += this.dataSet[index]['ial']['screen_time'];
-    	 avgTime /= this.dataSet.length;
-    	 currentLogInfo['mean'] = avgTime;
-    	 
-    	 // compute standard deviation
-    	 var stdDev = 0; 
-    	 for (var index in this.dataSet)
-    		 stdDev += ((this.dataSet[index]['ial']['screen_time'] - avgTime) * (this.dataSet[index]['ial']['screen_time'] - avgTime));
-         stdDev /= this.dataSet.length; 
-         stdDev = Math.sqrt(stdDev);
-         currentLogInfo['standard_deviation'] = stdDev;
-         
-         // compute z-scores and probabilities
-         var scores = {};
-         var avgLevel = 0; 
-         for (var index in this.dataSet) {
-        	 scores[index] = {};
-        	 scores[index]['screen_time'] = this.dataSet[index]['ial']['screen_time'];
-        	 var zScore = (this.dataSet[index]['ial']['screen_time'] - avgTime) / stdDev;
-        	 scores[index]['z_score'] = zScore;
-        	 var prob = getZPercent(zScore); 
-        	 scores[index]['metric_level'] = prob; 
-        	 avgLevel += prob; 
-         }
-         avgLevel /= this.dataSet.length;
-
-         currentLogInfo['scores'] = scores;
-         currentLog['info'] = currentLogInfo;
-         // metric level in this case represents the average metric level across all data points
-         currentLog['metric_level'] = avgLevel;
-
-         this.biasLogs.push(currentLog);
-         return currentLog;
-     }
-
-
-
+	
     /*
      * ---------------------
      *   Utility functions
@@ -2259,7 +2204,7 @@
     }
 
 // private
-    function sortObj(list, key, order) {
+    function sortObj(list, key, order) { // * usermodel
         order = typeof order !== 'undefined' ? order : 'a';
         function compare(a, b) {
             if(key == "ial.weight" || key == "ial.id" || key == "ial.itemScore") {
@@ -2287,59 +2232,10 @@
     
 /** Probability Distributions **/
 
-	// private
-	// get the percent probability given the z-score
-	// where z-score represents number of standard deviations from the mean
-    function getZPercent(z) {
-    	// if z > 6.5 std dev's from the mean, it requires too many significant digits 
-        if ( z < -6.5)
-          return 0.0;
-        if ( z > 6.5) 
-          return 1.0;
-
-        // compute percent
-        var factK = 1;
-        var sum = 0;
-        var term = 1;
-        var k = 0;
-        var loopStop = Math.exp(-23);
-        while (Math.abs(term) > loopStop) {
-          term = .3989422804 * Math.pow(-1, k) * Math.pow(z, k) / (2 * k + 1) / Math.pow(2, k) * Math.pow(z, k + 1) / factK;
-          sum += term;
-          k++;
-          factK *= k;
-        }
-        sum += 0.5;
-
-        return sum;
-    }
-    
-	// private 
-	// get the percent probability given the f-statistic, numerator degrees of freedom (df1)
-	// and denominator degrees of freedom (df2)
-    function getFPercent(f, df1, df2) {
-    	
-    	if (df1 <= 0) {
-    		console.log('Numerator degrees of freedom must be positive');
-    		df1 = 1;
-    	}
-    	else if (df2 <= 0) {
-    		console.log('Denominator degrees of freedom must be positive');
-    		df2 = 1;
-    	}
-    	
-    	if (f <= 0) Fcdf = 0;
-    	else {
-    		Z = f / (f + df2 / df1);
-    		Fcdf = Betacdf(Z, df1 / 2, df2 / 2);
-    	}
-    	Fcdf = Math.round(Fcdf * 100000) / 100000;
-    	return Fcdf;
-    }
     
 	// private
 	// get the percent probability given the chi^2 test statistic and degrees of freedom
-    function getChiSquarePercent(chiSq, df) {
+    function getChiSquarePercent(chiSq, df) { // * usermodel.bias
 		if (df <= 0) {
 			console.log('Degrees of freedom must be positive');
 			df = 1; 
@@ -2353,7 +2249,7 @@
     // private
     // get the percent probability given the two distributions
     // TODO: taken from jerzy library -- figure out how to integrate Node.js to use library directly
-    function getKSPercent(x, y) {
+    function getKSPercent(x, y) { // * usermodel.bias
     	var all = new Vector(x.elements.concat(y.elements)).sort();
     	var ecdfx = x.ecdf(all);
     	var ecdfy = y.ecdf(all);

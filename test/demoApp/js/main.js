@@ -81,7 +81,6 @@
     };
 
     main.initializeVis = function(width, height){
-    	console.log(ial.getAttributeValueMap()); 
         var margin = {top: 40, right: 20, bottom: 20, left: 40},
             width = width - margin.left - margin.right,
             height = height - margin.top - margin.bottom;
@@ -205,7 +204,7 @@
                 if(typeof(clickSliderObj) != 'undefined'){
                     clickWeight = clickSliderObj.value();
                 }
-                ial.incrementItemWeight(d,clickWeight,true,{'level':'INFO','eventType':'single_click'});
+                ial.usermodel.incrementItemWeight(d,clickWeight,true,{'level':'INFO','eventType':'single_click'});
                 $("#similarPointsFocusPoint").text(d.Name);
                 showDetails(d);
             }, 250);
@@ -215,14 +214,14 @@
                 if(typeof(dblClickSliderObj) != 'undefined'){
                     dblClickWeight = dblClickSliderObj.value();
                 }
-                ial.incrementItemWeight(d,dblClickWeight,true,{'level':'INFO','eventType':'double_click'});
+                ial.usermodel.incrementItemWeight(d,dblClickWeight,true,{'level':'INFO','eventType':'double_click'});
                 addInterestPoint(d.Name);
             })
             .on('mouseover', function (d) {
                 if(typeof(hoverSliderObj) != 'undefined'){
                     hoverWeight = hoverSliderObj.value();
                 }
-                ial.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
+                ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
                 tip.show(d);
             })
             .on('mouseout', tip.hide);
@@ -302,7 +301,7 @@
                 if(typeof(clickSliderObj) != 'undefined'){
                     clickWeight = clickSliderObj.value();
                 }
-                ial.incrementItemWeight(d,clickWeight,true,{'level':'INFO','eventType':'single_click'});
+                ial.usermodel.incrementItemWeight(d,clickWeight,true,{'level':'INFO','eventType':'single_click'});
                 $("#similarPointsFocusPoint").text(d.Name);
                 showDetails(d);
             }, 250);
@@ -312,22 +311,22 @@
                 if(typeof(dblClickSliderObj) != 'undefined'){
                     dblClickWeight = dblClickSliderObj.value();
                 }
-                ial.incrementItemWeight(d,dblClickWeight,true,{'level':'INFO','eventType':'double_click'});
+                ial.usermodel.incrementItemWeight(d,dblClickWeight,true,{'level':'INFO','eventType':'double_click'});
                 addInterestPoint(d.Name);
             })
             .on('mouseover', function (d) {
                 if(typeof(hoverSliderObj) != 'undefined'){
                     hoverWeight = hoverSliderObj.value();
                 }
-                ial.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
+                ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
                 tip.show(d);
             })
             .on('mouseout', tip.hide);
     };
 
     main.drawProvenanceView = function (width,height) {
-        var topNPoints = ial.getTopNPointsByInteractionWeights(12);
-        var dataItemSessionLogs = ial.getDataItemLogs();
+        var topNPoints = ial.usermodel.getTopNPointsByInteractionWeights(12);
+        var dataItemSessionLogs = ial.log.getDataItemLogs();
         var distributionMap = {};
         for(var i in topNPoints){
             var point = topNPoints[i];
@@ -433,7 +432,7 @@
     function populateAttributeWeightDiv(){
         $("#attributeWeightDiv").html("");
         //var curNormalizedAttributeVector = ial.getNormalizedAttributeVector();
-        var curNormalizedAttributeVector = ial.getAttributeWeightVector();
+        var curNormalizedAttributeVector = ial.usermodel.getAttributeWeightVector();
 
         var data = [];
         for(var attribute in curNormalizedAttributeVector){
@@ -487,7 +486,7 @@
 
     function updateAttributeWeightDiv(){
         //var curAttributeVector = ial.getNormalizedAttributeVector();
-        var curAttributeVector = ial.getAttributeWeightVector();
+        var curAttributeVector = ial.usermodel.getAttributeWeightVector();
 
         d3.selectAll('.infobar')
             .transition().duration(500)
@@ -506,7 +505,7 @@
 
     function printAttributeVector(){
         //var curNormalizedAttributeVector = ial.getNormalizedAttributeVector();
-        var curNormalizedAttributeVector = ial.getAttributeWeightVector();
+        var curNormalizedAttributeVector = ial.usermodel.getAttributeWeightVector();
         $("#attributeWeightDiv").html("");
         $("#attributeWeightDiv").append("<br>");
         for(var attribute in curNormalizedAttributeVector){
@@ -525,7 +524,7 @@
     });
 
     function getTopNPointsByItemScores(N){
-        var topNPoints = ial.getTopNPointsByScores(N,true,{'level':'DEBUG'});
+        var topNPoints = ial.usermodel.getTopNPointsByScores(N,true,{'level':'DEBUG'});
         $("#topNDiv").html("");
         $("#topNDiv").append("<br/><hr>");
 
@@ -550,7 +549,7 @@
 
 
     function getTopNPointsByInteractionWeight(N){
-        var topNPoints = ial.getTopNPointsByInteractionWeights(N,true,{'level':'DEBUG'});
+        var topNPoints = ial.usermodel.getTopNPointsByInteractionWeights(N,true,{'level':'DEBUG'});
         $("#topNDiv").html("");
         $("#topNDiv").append("<br/><hr>");
 
@@ -597,7 +596,7 @@
         computeClusters();
     });
     function computeClusters(){
-        var clusterList = ial.createClusters();
+        var clusterList = ial.analytics.createClusters();
         activeClusterList = clusterList;
         //console.log(clusterList);
     }
@@ -612,7 +611,7 @@
     }
 
     $("#resetAttributeWeightsButton").click(function (ev) {
-        ial.resetAttributeWeightVector(true, {'level':'INFO','eventType':'reset_attribute_weight_vector'});
+        ial.usermodel.resetAttributeWeightVector(true, {'level':'INFO','eventType':'reset_attribute_weight_vector'});
         updateAttributeWeightDiv();
     });
 
@@ -627,11 +626,11 @@
             }
         });
         console.log(newWeightVector);
-        ial.setAttributeWeightVector(newWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
+        ial.usermodel.setAttributeWeightVector(newWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
         updateAttributeWeightDiv();
     });
 
-    $("#cancelAttributeWeightUpdates").click(function(ev){
+    /*$("#cancelAttributeWeightUpdates").click(function(ev){
         d3.selectAll('.infobar')
             .transition().duration(500)
             .attr('width', function (d) {
@@ -644,7 +643,7 @@
             .text(function(d) {
                 return parseFloat(Math.round(d.value * 10000) / 10000).toFixed(5);
             });
-    });
+    });*/
 
     $("#getSimilarPoints").click(function(ev){
         var N = $("#NSimilarPointsValue").val();
@@ -659,7 +658,7 @@
     });
 
     function getNSimilarPoints(focusPoint,N){
-        var similarPoints = ial.getNSimilarPoints(focusPoint,N);
+        var similarPoints = ial.usermodel.getNSimilarPoints(focusPoint,N);
         console.log(similarPoints);
         $("#similarPointsDiv").html("");
         $("#similarPointsDiv").append("<hr>");
@@ -701,7 +700,7 @@
     });
 
     $("#computeDataPointCoverage").click(function(ev){
-        var biasResult = ial.computeDataPointCoverage(); 
+        var biasResult = ial.usermodel.bias.computeDataPointCoverage(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Data Point Coverage Metric:</b> " + biasResult['metric_level']);
         console.log("Data Point Coverage Metric Result");
@@ -709,7 +708,7 @@
     });
 
     $("#computeDataPointDistribution").click(function(ev){
-        var biasResult = ial.computeDataPointDistribution(); 
+        var biasResult = ial.usermodel.bias.computeDataPointDistribution(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Data Point Distribution Metric:</b> " + biasResult['metric_level']);
         console.log("Data Point Distribution Metric Result");
@@ -717,7 +716,7 @@
     });
     
     $("#computeAttributeCoverage").click(function(ev){
-        var biasResult = ial.computeAttributeCoverage(); 
+        var biasResult = ial.usermodel.bias.computeAttributeCoverage(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Attribute Coverage Metric:</b> " + biasResult['metric_level']);
         console.log("Attribute Coverage Metric Result");
@@ -725,7 +724,7 @@
     });
 
     $("#computeAttributeDistribution").click(function(ev){
-        var biasResult = ial.computeAttributeDistribution(); 
+        var biasResult = ial.usermodel.bias.computeAttributeDistribution(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Attribute Distribution Metric:</b> " + biasResult['metric_level']);
         console.log("Attribute Distribution Metric Result");
@@ -733,7 +732,7 @@
     });
     
     $("#computeAttributeWeightCoverage").click(function(ev){
-        var biasResult = ial.computeAttributeWeightCoverage(); 
+        var biasResult = ial.usermodel.bias.computeAttributeWeightCoverage(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Attribute Weight Coverage Metric:</b> " + biasResult['metric_level']);
         console.log("Attribute Weight Coverage Metric Result");
@@ -741,23 +740,15 @@
     });
 
     $("#computeAttributeWeightDistribution").click(function(ev){
-        var biasResult = ial.computeAttributeWeightDistribution(); 
+        var biasResult = ial.usermodel.bias.computeAttributeWeightDistribution(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>Attribute Weight Distribution Metric:</b> " + biasResult['metric_level']);
         console.log("Attribute Weight Distribution Metric Result");
         console.log(biasResult);
     });
-    
-    $("#computeScreenTimeBias").click(function(ev){
-        var biasResult = ial.computeScreenTimeBias(); 
-        $("#biasResultsDiv").html("");
-        $("#biasResultsDiv").append("<b>Screen Time Metric:</b> " + biasResult['metric_level']);
-        console.log("Screen Time Bias Metric Result");
-        console.log(biasResult);
-    });
 
     $("#computeAllBias").click(function(ev){
-        var biasResult = ial.computeBias(); 
+        var biasResult = ial.usermodel.bias.computeBias(); 
         $("#biasResultsDiv").html("");
         $("#biasResultsDiv").append("<b>All Metrics:</b> " + biasResult['metric_level']);
         console.log("All Bias Metric Results");
@@ -788,7 +779,7 @@
         //bugout.downloadLog(); 
 
         bugout.logFilename = biasFileName + "_interaction_logs.txt";
-        var interactionLogs = ial.getInteractionQueue(); 
+        var interactionLogs = ial.log.getInteractionQueue(); 
         bugout.log("------------------------------------------------");
         bugout.log("------------ INTERACTION LOGS (" + interactionLogs.length + ") ------------"); 
         bugout.log("------------------------------------------------");
@@ -805,7 +796,7 @@
         bugout.clear();
         bugout.logFilename = biasFileName + "_attribute_weight_logs.txt";
 
-        var attributeWeightLogs = ial.getAttributeWeightVectorQueue(); 
+        var attributeWeightLogs = ial.usermodel.getAttributeWeightVectorQueue(); 
         bugout.log("------------------------------------------------");
         bugout.log("------------ ATTRIBUTE WEIGHT LOGS (" + attributeWeightLogs.length + ") ------------"); 
         bugout.log("------------------------------------------------");
@@ -820,7 +811,7 @@
         bugout.downloadLog(); 
         bugout.clear(); 
 
-        ial.printBiasLogs();
+        ial.usermodel.bias.printBiasLogs();
 
                 /*var biasLogs = ial.getBiasLogs(); 
         bugout.log("------------------------------------------------");
@@ -838,7 +829,7 @@
     });
 
     $("#nullifyAttributeWeightsButton").click(function(ev){
-        ial.nullifyAttributeWeightVector(true,{'level':'DEBUG'});
+        ial.usermodel.nullifyAttributeWeightVector(true,{'level':'DEBUG'});
         updateAttributeWeightDiv();
     });
 
@@ -943,9 +934,9 @@
 
         var derivedWeightVector;
         if (document.getElementById("useSimilaritiesForWeightVectorComputation").checked == true) {
-            derivedWeightVector = ial.generateAttributeWeightVectorUsingSimilarity(interestObjectsList);
+            derivedWeightVector = ial.usermodel.generateAttributeWeightVectorUsingSimilarity(interestObjectsList);
         }else if(document.getElementById("useDifferencesForWeightVectorComputation").checked == true) {
-            derivedWeightVector = ial.generateAttributeWeightVectorUsingDifferences(interestObjectsList);
+            derivedWeightVector = ial.usermodel.generateAttributeWeightVectorUsingDifferences(interestObjectsList);
         }
         console.log(derivedWeightVector);
     }
@@ -967,14 +958,15 @@
             interestObjectsList.push(getCarObjectByName(interestPointsList[i]));
         }
 
-        var derivedWeightVector;
+		var derivedWeightVector = ial.usermodel.generateAttributeWeightVectorUsingSimilarity(interestObjectsList);
+        /*var derivedWeightVector;
         if (document.getElementById("useSimilaritiesForWeightVectorComputation").checked == true) {
-            derivedWeightVector = ial.generateAttributeWeightVectorUsingSimilarity(interestObjectsList);
+            derivedWeightVector = ial.usermodel.generateAttributeWeightVectorUsingSimilarity(interestObjectsList);
         }else if(document.getElementById("useDifferencesForWeightVectorComputation").checked == true) {
-            derivedWeightVector = ial.generateAttributeWeightVectorUsingDifferences(interestObjectsList);
-        }
+            derivedWeightVector = ial.usermodel.generateAttributeWeightVectorUsingDifferences(interestObjectsList);
+        }*/
         
-        ial.setAttributeWeightVector(derivedWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
+        ial.usermodel.setAttributeWeightVector(derivedWeightVector, true, {'level':'INFO','eventType':'set_attribute_weight_vector'});
         updateAttributeWeightDiv();
     }
 
