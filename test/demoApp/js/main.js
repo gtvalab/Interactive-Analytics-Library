@@ -221,7 +221,8 @@
                 if(typeof(hoverSliderObj) != 'undefined'){
                     hoverWeight = hoverSliderObj.value();
                 }
-                ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
+                //ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
+                ial.log.log(d, new Date(), 'hover');
                 tip.show(d);
             })
             .on('mouseout', tip.hide);
@@ -822,6 +823,24 @@
 
         //bugout.downloadLog();  
 
+    });
+    
+    $("#downloadLogs").click(function(ev){
+        var logFileName = $("#downloadLogFileName").val();
+        bugout.logFilename = logFileName;
+        console.log("Downloading logs to " + logFileName);
+
+		bugout.log("[");
+        var sessionLogs = ial.log.getSessionLogs(); 
+        for (var i = 0; i < sessionLogs.length; i++) {
+            var log = sessionLogs[i]; 
+            if (i < sessionLogs.length - 1) bugout.log(JSON.stringify(log) + ",");
+            else bugout.log(JSON.stringify(log));
+        }
+        bugout.log("]");
+
+        bugout.downloadLog(); 
+        bugout.clear(); 
     });
 
     $("#groupClustersButton").click(function (ev) {

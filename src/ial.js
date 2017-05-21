@@ -301,6 +301,399 @@
 
 
     /*
+     * returns the dataset
+     * */
+    ial.getData = function() {
+        return this.dataSet;
+    }
+
+// returns the current attributeValueMap
+    ial.getAttributeValueMap = function(){
+        return ial.utils.clone(this.attributeValueMap);
+    };
+
+    /*
+    * Function to delete an item from all computations.
+    * Given a dataItem object, removes the corresponding item from both the this.dataSet (list) and the this.ialIdToDataMap (hashmap)
+    * */
+    ial.deleteItem = function (dataItem) {
+        var idToDelete = dataItem.ial.id;
+        var indexToDelete = -1;
+        for(var i in this.dataSet){
+            var d = this.dataSet[i];
+            var curId = d.ial.id;
+            if(idToDelete==curId){
+                indexToDelete=i;
+                break;
+            }
+        }
+        if(indexToDelete!=-1){
+            this.dataSet.splice(indexToDelete,1);
+            delete this.ialIdToDataMap[idToDelete];
+        }
+    };
+
+    ial.addItem = function (dataPoints) {
+    	dataPoints.forEach(function(dataPoint) {
+            var newId = parseInt(this.dataSet[this.dataSet.length-1].ial.id);
+            while(newId in this.ialIdToDataMap){
+                newId += 1;
+            }
+
+            dataPoint['ial'] = {};
+            dataPoint['ial']['id'] = newId;
+            dataPoint['ial']['weight'] = 1;
+            dataPoint['ial']['itemScore'] = parseFloat(ial.usermodel.getItemScore(dataPoint,this.attributeWeightVector));
+
+            this.ialIdToDataMap[newId] = dataPoint;
+            this.dataSet.push(dataPoint);
+        });
+    };
+
+    /*
+     * returns normalized value in [minWeight,maxWeight] given an attribute's current value and name
+     * ref: http://stackoverflow.com/questions/5294955/how-to-scale-down-a-range-of-numbers-with-a-known-min-and-max-value
+     * */
+    ial.getNormalizedAttributeValue = function(val,attribute) {
+        if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
+            var a = this.minWeight, b = this.maxWeight;
+            var min = this.attributeValueMap[attribute]['min'];
+            var max = this.attributeValueMap[attribute]['max'];
+
+            var normalizedValue;
+            normalizedValue = ((b - a) * (val - min) / (max - min)) + a;
+            return normalizedValue;
+        } else { return val; }
+    };
+    
+    
+    
+    /*
+     * --------------------
+     *      IAL.LOG
+     * --------------------
+     */
+     
+     
+     
+     /*
+     * Log object data structure
+     * */
+
+    var LogObj = function (d, tStamp) { // * log
+        d = typeof d !== 'undefined' ? d : '';
+
+        this.dataItem = d;
+        this.eventName = '';
+        this.oldWeight = '';
+        this.newWeight = '';
+        this.customLogInfo = {};
+        this.eventSpecificInfo = {};
+
+        tStamp = typeof tStamp !== 'undefined' ? tStamp : new Date();
+
+        this.eventTimeStamp = tStamp;
+    };
+
+    LogObj.prototype.setEventSpecificInfo = function(eventInfoMap) {
+        this.eventSpecificInfo = eventInfoMap;
+    };
+
+    LogObj.prototype.setNewWeight = function(weight) {
+        this.newWeight = weight;
+    };
+
+    LogObj.prototype.setOldWeight = function(weight) {
+        this.oldWeight = weight;
+    };
+
+    LogObj.prototype.setEventName = function(ev) {
+        this.eventName = ev;
+    };
+
+    LogObj.prototype.setCustomLogInfo = function(customLogInfoMap) {
+        this.customLogInfo = ial.utils.clone(customLogInfoMap);
+    };
+    
+    /*
+     * Create a log
+     * d, tStamp,eventName are optional
+     * use LogObj functions to add other info to the log
+     */
+    ial.log.log = function(d,tStamp,eventName,customInfo) {
+    	var logObj = new LogObj(d,tStamp);
+        logObj.setEventName(eventName);
+        if(customInfo!={}){
+            logObj.setCustomLogInfo(customInfo);
+        }
+
+        ial.sessionLogs.push(logObj);
+    };
+    // TODO: sessionLogs v. interactionQueue v. attributeWeightQueue......?
+    
+     /*
+     * Returns a copy of the session logs collected so far
+     * */
+    ial.log.getSessionLogs = function(){
+        return ial.sessionLogs.slice(0);
+    };
+
+    /*
+     * Returns the subset of logs which involve data items.
+     * */
+    ial.log.getDataItemLogs = function(){
+        var dataItemLogList = [];
+        for(var i in ial.sessionLogs){
+            var logObj = ial.sessionLogs[i];
+            if (ial.dataSet.indexOf(logObj.dataItem) > -1) {
+            	dataItemLogList.push(logObj); 
+            }
+        }
+
+        return dataItemLogList;
+    };
+
+
+    /*
+     * Returns the subset of logs which involve attributes.
+     * */
+    ial.log.getAttributeLogs = function () {
+        var attributeLogList = [];
+        for(var i in ial.sessionLogs){
+            var logObj = ial.sessionLogs[i];
+            if (ial.dataSet.indexOf(logObj.dataItem) < 0) {
+            	attributeLogList.push(logObj); 
+            }
+        }
+        return attributeLogList;
+    };
+     
+     /*
+     * Interaction and attribute weight vector queue utilities
+     * */
+
+    ial.log.setMaxQueueSize = function(newQueueSize) {
+        ial.maxQueueSize = newQueueSize; 
+    }
+
+    ial.log.getInteractionQueue = function() {
+        return ial.interactionQueue;
+    }
+
+// print the contents of the interaction queue
+    ial.log.printInteractionQueue = function() {
+        console.log("Printing Interaction Queue (" + ial.interactionQueue.length + "): ");
+        for (var i in ial.interactionQueue) console.log(ial.interactionQueue[i]);
+    }
+
+    ial.log.interactionEnqueue = function(obj) {
+        if (typeof obj === 'undefined' || obj == null) return;
+
+        if (ial.interactionQueue.length >= ial.maxQueueSize) {
+            console.log("Max queue size reached");
+            ial.log.interactionDequeue();
+        }
+        ial.interactionQueue.push(obj);
+    }
+
+    ial.log.interactionDequeue = function() {
+        return ial.interactionQueue.shift(); 
+    }
+
+    ial.log.getAttributeWeightVectorQueue = function() {
+        return ial.attributeWeightVectorQueue;
+    }
+
+// print the contents of the interaction queue
+    ial.log.printAttributeWeightVectorQueue = function() {
+        console.log("Printing Attribute Weight Vector Queue (" + ial.attributeWeightVectorQueue.length + "): ");
+        for (var i in ial.attributeWeightVectorQueue) console.log(ial.attributeWeightVectorQueue[i]);
+    }
+
+    ial.log.attributeWeightVectorEnqueue = function(obj) {
+        if (typeof obj === 'undefined' || obj == null) return;
+
+        if (ial.attributeWeightVectorQueue.length >= ial.maxQueueSize) {
+            console.log("Max queue size reached"); 
+            ial.log.attributeWeightVectorDequeue();
+        }
+        ial.attributeWeightVectorQueue.push(obj);
+    }
+
+    ial.log.attributeWeightVectorDequeue = function() {
+        return ial.log.attributeWeightVectorQueue.shift(); 
+    }
+
+// private
+// time arg can be a Date object; returns all interactions that occurred since 'time'
+// time arg can be an integer; returns the last 'time' interactions
+// interactionTypes defines which types of interactions to consider
+    function getInteractionQueueSubset(time, interactionTypes) { // * log
+        ial.interactionQueue = ial.utils.clone(ial.log.getInteractionQueue());
+        var interactionSubset = [];
+
+        if (typeof time === 'undefined') time = ial.interactionQueue.length;
+
+        if (time instanceof Date) {
+            for (var i = 0; i < ial.interactionQueue.length; i++) {
+                var curLog = ial.interactionQueue[i];
+                var curTime = curLog.eventTimeStamp;
+                var curEventType = curLog['customLogInfo']['eventType'];
+                if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1))
+                    interactionSubset.push(ial.interactionQueue[i]);
+            }
+        } else if (!isNaN(parseInt(time))) {
+            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
+            var numLogs = 0;
+            var i = ial.interactionQueue.length - 1;
+            while (i >= 0 && numLogs <= time) {
+                var curLog = ial.interactionQueue[i];
+                var curEventType = curLog['customLogInfo']['eventType'];
+                if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                    interactionSubset.push(curLog);
+                    numLogs++;
+                }
+                i--;
+            }
+        }
+
+        return interactionSubset;
+    }
+
+// private
+// 'time' can be a Date object; returns all interactions that occurred since 'time'
+// 'time' can be an integer; returns the last 'time' interactions
+// interactionTypes defines which types of interactions to consider
+    function getInteractionQueueSubsetByEventType(time, interactionTypes) { // * log
+        var interactionSubsetQueues = {};
+        ial.interactionQueue = ial.log.getInteractionQueue(); 
+
+        if (typeof time === 'undefined') time = ial.interactionQueue.length;
+
+        if (time instanceof Date) {
+            interactionSubsetQueues = {};
+            for (var i = 0; i < ial.interactionQueue.length; i++) {
+                var curLog = ial.interactionQueue[i];
+                var curTime = curLog.eventTimeStamp;
+                var curEventType = curLog.customLogInfo.eventType;
+                if (curEventType === 'undefined') curEventType = 'uncategorized';
+                if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
+                    var curQueue = [];
+                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
+
+                    curQueue.push(curLog);
+                    interactionSubsetQueues[curEventType] = curQueue;
+                }
+            }
+        } else if (!isNaN(parseInt(time))) {
+            interactionSubsetQueues = {};
+            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
+            var i = 0;
+            var numLogs = 0;
+            while (i < ial.interactionQueue.length && numLogs <= time) {
+                var curLog = ial.interactionQueue[i];
+                var curEventType = curLog.customLogInfo.eventType;
+                if (curEventType === 'undefined') curEventType = 'uncategorized';
+                if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                    var curQueue = [];
+                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
+
+                    curQueue.push(curLog);
+                    interactionSubsetQueues[curEventType] = curQueue;
+                    numLogs++;
+                }
+                i++;
+            }
+        }
+
+        return interactionSubsetQueues;
+    }
+    
+ // private
+ // 'time' can be a Date object; returns all interactions that occurred since 'time'
+ // 'time' can be an integer; returns the last 'time' interactions
+ // interactionTypes defines which types of interactions to consider
+     function getInteractionQueueSubsetByDataPoint(time, interactionTypes) { // * log
+         var interactionSubsetQueues = {};
+         ial.interactionQueue = ial.log.getInteractionQueue(); 
+
+         if (typeof time === 'undefined') time = ial.interactionQueue.length;
+
+         if (time instanceof Date) {
+             interactionSubsetQueues = {};
+             for (var i = 0; i < ial.interactionQueue.length; i++) {
+                 var curLog = ial.interactionQueue[i];
+                 var curTime = curLog.eventTimeStamp;
+                 var curData = curLog.dataItem;
+                 var curEventType = curLog.customLogInfo.eventType;
+                 if (curEventType === 'undefined') curEventType = 'uncategorized';
+                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
+                     var curQueue = [];
+                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
+
+                     curQueue.push(curLog);
+                     interactionSubsetQueues[curData.ial.id] = curQueue;
+                 }
+             }
+         } else if (!isNaN(parseInt(time))) {
+             interactionSubsetQueues = {};
+             if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
+             var i = 0;
+             var numLogs = 0;
+             while (i < ial.interactionQueue.length && numLogs <= time) {
+                 var curLog = ial.interactionQueue[i];
+                 var curData = curLog.dataItem;
+                 var curEventType = curLog.customLogInfo.eventType;
+                 if (curEventType === 'undefined') curEventType = 'uncategorized';
+                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
+                     var curQueue = [];
+                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
+
+                     curQueue.push(curLog);
+                     interactionSubsetQueues[curData.ial.id] = curQueue;
+                     numLogs++;
+                 }
+                 i++;
+             }
+         }
+
+         return interactionSubsetQueues;
+     }
+
+// private
+// arg can be a Date object; returns all interactions that occurred since 'time'
+// arg can be an integer; returns the last 'time' interactions
+    function getWeightVectorQueueSubset(time) { // * log
+        ial.attributeWeightVectorQueue = ial.log.getAttributeWeightVectorQueue();
+        var weightVectorSubset = ial.log.getAttributeWeightVectorQueue();
+
+        if (typeof time !== 'undefined') {
+            if (time instanceof Date) {
+                weightVectorSubset = [];
+                for (var i = 0; i < ial.attributeWeightVectorQueue.length; i++) {
+                    var curTime = ial.attributeWeightVectorQueue[i].eventTimeStamp;
+                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
+                }
+            } else if (!isNaN(parseInt(time))) {
+                weightVectorSubset = [];
+                if (time > ial.attributeWeightVectorQueue.length) time = ial.attributeWeightVectorQueue.length;
+                for (var i = 0; i < time; i++)
+                    weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
+            }
+        }
+
+        return weightVectorSubset;
+    }
+
+     
+    /*
+     * --------------------
+     *    IAL.USERMODEL
+     * --------------------
+     */
+     
+     
+     /*
      * computes item score
      * params: data point object, current attribute weight vector
      * */
@@ -363,15 +756,7 @@
 
         return inputMap;
     }; 
-
-
-    /*
-     * returns the dataset
-     * */
-    ial.getData = function() {
-        return this.dataSet;
-    }
-
+    
     /*
      * sets weight to new value
      * */
@@ -421,66 +806,7 @@
         }
         //console.log(logObj)
     };
-
-// returns the current attributeValueMap
-    ial.getAttributeValueMap = function(){
-        return ial.utils.clone(this.attributeValueMap);
-    };
-
-    /*
-    * Function to delete an item from all computations.
-    * Given a dataItem object, removes the corresponding item from both the this.dataSet (list) and the this.ialIdToDataMap (hashmap)
-    * */
-    ial.deleteItem = function (dataItem) {
-        var idToDelete = dataItem.ial.id;
-        var indexToDelete = -1;
-        for(var i in this.dataSet){
-            var d = this.dataSet[i];
-            var curId = d.ial.id;
-            if(idToDelete==curId){
-                indexToDelete=i;
-                break;
-            }
-        }
-        if(indexToDelete!=-1){
-            this.dataSet.splice(indexToDelete,1);
-            delete this.ialIdToDataMap[idToDelete];
-        }
-    };
-
-    ial.addData = function (dataPoints) {
-    	dataPoints.forEach(function(dataPoint) {
-            var newId = parseInt(this.dataSet[this.dataSet.length-1].ial.id);
-            while(newId in this.ialIdToDataMap){
-                newId += 1;
-            }
-
-            dataPoint['ial'] = {};
-            dataPoint['ial']['id'] = newId;
-            dataPoint['ial']['weight'] = 1;
-            dataPoint['ial']['itemScore'] = parseFloat(ial.usermodel.getItemScore(dataPoint,this.attributeWeightVector));
-
-            this.ialIdToDataMap[newId] = dataPoint;
-            this.dataSet.push(dataPoint);
-        });
-    };
-
-    /*
-     * returns normalized value in [minWeight,maxWeight] given an attribute's current value and name
-     * ref: http://stackoverflow.com/questions/5294955/how-to-scale-down-a-range-of-numbers-with-a-known-min-and-max-value
-     * */
-    ial.getNormalizedAttributeValue = function(val,attribute) {
-        if (this.attributeValueMap[attribute]['dataType'] != 'categorical') {
-            var a = this.minWeight, b = this.maxWeight;
-            var min = this.attributeValueMap[attribute]['min'];
-            var max = this.attributeValueMap[attribute]['max'];
-
-            var normalizedValue;
-            normalizedValue = ((b - a) * (val - min) / (max - min)) + a;
-            return normalizedValue;
-        } else { return val; }
-    };
-
+    
     /*
      * returns current attributeWeightVector
      * */
@@ -857,44 +1183,6 @@
         }
     };
 
-    /*
-     * Returns a copy of the session logs collected so far
-     * */
-    ial.log.getSessionLogs = function(){
-        return ial.sessionLogs.slice(0);
-    };
-
-    /*
-     * Returns the subset of logs which involve data items.
-     * */
-    ial.log.getDataItemLogs = function(){
-        var dataItemLogList = [];
-        for(var i in ial.sessionLogs){
-            var logObj = ial.sessionLogs[i];
-            if(logObj.eventName.indexOf('ItemWeightChange')>-1){
-                dataItemLogList.push(logObj);
-            }
-        }
-
-        return dataItemLogList;
-    };
-
-
-    /*
-     * Returns the subset of logs which involve attributes.
-     * */
-    ial.log.getAttributeLogs = function () {
-        var dataItemLogList = [];
-        for(var i in ial.sessionLogs){
-            var logObj = ial.sessionLogs[i];
-            if(logObj.eventName.indexOf('AttributeWeightChange')>-1){
-                dataItemLogList.push(logObj);
-            }
-        }
-        return dataItemLogList;
-    };
-
-
     function getVariance(arr) { // * usermodel
 
         function getVariance(arr, mean) {
@@ -1134,384 +1422,8 @@
 
         return tempAttributeWeightVector;
     };
-
-    /*
-     * --------------------
-     *         KNN
-     * --------------------
-     * */
-
-    ial.analytics.createClusters = function(dataItems, knnDistance) {
-        dataItems = typeof dataItems !== 'undefined' ? dataItems : ial.dataSet;
-        knnDistance = typeof knnDistance !== 'undefined' ? knnDistance : 0.05;
-        ial.clusters = ial.analytics.classify(dataItems, knnDistance);
-        return ial.clusters;
-    };
-
-    ial.analytics.classify = function(dataPoints, knnDistance) {
-        var aggregateScores = [];
-
-        var tempStringId = 10,
-            tempStringValMap = {};
-
-        /* Use the attribute weight vector for these computations. */
-        for (var index in dataPoints) {
-            aggregateScores[index] = {};
-            aggregateScores[index]["ial"] = {};
-            aggregateScores[index]["ial"]["id"] = dataPoints[index]["ial"]["id"];
-            aggregateScores[index]["ial"]["aggregateScore"] = 0;
-            for (var attributeName in ial.attributeWeightVector) {
-                var attributeValue = ial.getNormalizedAttributeValue(dataPoints[index][attributeName],attributeName);
-                var attributeWeight = ial.attributeWeightVector[attributeName];
-
-                if(attributeName!='ial'){
-                    if(ial.attributeValueMap[attributeName]['dataType']=='categorical'){
-                        if (Object.keys(tempStringValMap).indexOf(attributeValue) == -1) { // if string not found in tempStringValMap i.e. is a new category string
-                            tempStringValMap[attributeValue] = tempStringId;
-                            attributeValue = tempStringId;
-                            tempStringId += 10;
-                        } else {
-                            attributeValue = tempStringValMap[attributeValue];
-                        }
-                        aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
-                    }else{
-                        aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
-                    }
-                }
-            }
-            aggregateScores[index]["ial"]["aggregateScore"] *= dataPoints[index]["ial"]["weight"];
-        }
-        
-        aggregateScores.sort(function(a, b) {
-            return b["ial"]["aggregateScore"] - a["ial"]["aggregateScore"];
-        });
-
-        var clusters = [];
-        var clusterIndex = -1;
-        for (var index in aggregateScores) {
-            if (clusters.length == 0) {
-                clusterIndex += 1;
-                var cluster = new Cluster(clusterIndex);
-                var curDataObj = ial.ialIdToDataMap[aggregateScores[index]["ial"]["id"]];
-                curDataObj.ial.KNNClusterId = cluster.getClusterId();
-                cluster.addDataItem(curDataObj);
-                clusters.push(cluster);
-            } else {
-                var previousObject = aggregateScores[index - 1];
-                var currentObject = aggregateScores[index];
-
-                if (Math.abs(currentObject["ial"]["aggregateScore"] - previousObject["ial"]["aggregateScore"]) <= knnDistance) {
-                    var curDataObj = ial.ialIdToDataMap[currentObject["ial"]['id']];
-                    curDataObj.ial.KNNClusterId = cluster.getClusterId();
-                    cluster.addDataItem(curDataObj);
-                } else {
-                    clusterIndex += 1;
-                    var cluster = new Cluster(clusterIndex);
-                    var curDataObj = ial.ialIdToDataMap[aggregateScores[index]["ial"]['id']];
-                    curDataObj.ial.KNNClusterId = cluster.getClusterId();
-                    cluster.addDataItem(curDataObj);
-                    clusters.push(cluster);
-                }
-            }
-        }
-        return clusters;
-    };
-
-    /*
-     * Cluster data structure
-     * */
-
-    var Cluster = function(id) { // * analytics
-        this.clusterId = id;
-        this.clusterLabel = "";
-        this.dataItems = [];
-    };
-
-    Cluster.prototype.getClusterId = function() {
-        return this.clusterId;
-    };
-
-    Cluster.prototype.setClusterLabel = function(label) {
-        this.clusterLabel = label;
-    };
-
-    Cluster.prototype.getClusterLabel = function() {
-        return this.clusterLabel;
-    };
-
-    Cluster.prototype.addDataItem = function(dataItemOrId) { //TO-DO: handle ids and objects
-        this.dataItems.push(dataItemOrId);
-    };
-
-    Cluster.prototype.removeDataItem = function(dataItemOrId) { //TO-DO: handle ids and objects
-        this.dataItems.push(dataItemOrId);
-    };
-
-    Cluster.prototype.getClusterDataItems = function() {
-        return this.dataItems;
-    };
-
-
-
-    /*
-     * Log object data structure
-     * */
-
-    var LogObj = function (d,tStamp) { // * log
-        d = typeof d !== 'undefined' ? d : '';
-
-        this.dataItem = d;
-        this.eventName = '';
-        this.oldWeight = '';
-        this.newWeight = '';
-        this.customLogInfo = {};
-        this.eventSpecificInfo = {};
-
-        tStamp = typeof tStamp !== 'undefined' ? tStamp : new Date();
-
-        this.eventTimeStamp = tStamp;
-    };
-
-    LogObj.prototype.setEventSpecificInfo = function(eventInfoMap) {
-        this.eventSpecificInfo = eventInfoMap;
-    };
-
-    LogObj.prototype.setNewWeight = function(weight) {
-        this.newWeight = weight;
-    };
-
-    LogObj.prototype.setOldWeight = function(weight) {
-        this.oldWeight = weight;
-    };
-
-    LogObj.prototype.setEventName = function(ev) {
-        this.eventName = ev;
-    };
-
-    LogObj.prototype.setCustomLogInfo = function(customLogInfoMap) {
-        this.customLogInfo = ial.utils.clone(customLogInfoMap);
-    };
-
-
-
-    /*
-     * Interaction and attribute weight vector queue utilities
-     * */
-
-    ial.log.setMaxQueueSize = function(newQueueSize) {
-        ial.maxQueueSize = newQueueSize; 
-    }
-
-    ial.log.getInteractionQueue = function() {
-        return ial.interactionQueue;
-    }
-
-// print the contents of the interaction queue
-    ial.log.printInteractionQueue = function() {
-        console.log("Printing Interaction Queue (" + ial.interactionQueue.length + "): ");
-        for (var i in ial.interactionQueue) console.log(ial.interactionQueue[i]);
-    }
-
-    ial.log.interactionEnqueue = function(obj) {
-        if (typeof obj === 'undefined' || obj == null) return;
-
-        if (ial.interactionQueue.length >= ial.maxQueueSize) {
-            console.log("Max queue size reached");
-            ial.log.interactionDequeue();
-        }
-        ial.interactionQueue.push(obj);
-    }
-
-    ial.log.interactionDequeue = function() {
-        return ial.interactionQueue.shift(); 
-    }
-
-    ial.log.getAttributeWeightVectorQueue = function() {
-        return ial.attributeWeightVectorQueue;
-    }
-
-// print the contents of the interaction queue
-    ial.log.printAttributeWeightVectorQueue = function() {
-        console.log("Printing Attribute Weight Vector Queue (" + ial.attributeWeightVectorQueue.length + "): ");
-        for (var i in ial.attributeWeightVectorQueue) console.log(ial.attributeWeightVectorQueue[i]);
-    }
-
-    ial.log.attributeWeightVectorEnqueue = function(obj) {
-        if (typeof obj === 'undefined' || obj == null) return;
-
-        if (ial.attributeWeightVectorQueue.length >= ial.maxQueueSize) {
-            console.log("Max queue size reached"); 
-            ial.log.attributeWeightVectorDequeue();
-        }
-        ial.attributeWeightVectorQueue.push(obj);
-    }
-
-    ial.log.attributeWeightVectorDequeue = function() {
-        return ial.log.attributeWeightVectorQueue.shift(); 
-    }
-
-// private
-// time arg can be a Date object; returns all interactions that occurred since 'time'
-// time arg can be an integer; returns the last 'time' interactions
-// interactionTypes defines which types of interactions to consider
-    function getInteractionQueueSubset(time, interactionTypes) { // * log
-        ial.interactionQueue = ial.utils.clone(ial.log.getInteractionQueue());
-        var interactionSubset = [];
-
-        if (typeof time === 'undefined') time = ial.interactionQueue.length;
-
-        if (time instanceof Date) {
-            for (var i = 0; i < ial.interactionQueue.length; i++) {
-                var curLog = ial.interactionQueue[i];
-                var curTime = curLog.eventTimeStamp;
-                var curEventType = curLog['customLogInfo']['eventType'];
-                if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1))
-                    interactionSubset.push(ial.interactionQueue[i]);
-            }
-        } else if (!isNaN(parseInt(time))) {
-            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
-            var numLogs = 0;
-            var i = ial.interactionQueue.length - 1;
-            while (i >= 0 && numLogs <= time) {
-                var curLog = ial.interactionQueue[i];
-                var curEventType = curLog['customLogInfo']['eventType'];
-                if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
-                    interactionSubset.push(curLog);
-                    numLogs++;
-                }
-                i--;
-            }
-        }
-
-        return interactionSubset;
-    }
-
-// private
-// 'time' can be a Date object; returns all interactions that occurred since 'time'
-// 'time' can be an integer; returns the last 'time' interactions
-// interactionTypes defines which types of interactions to consider
-    function getInteractionQueueSubsetByEventType(time, interactionTypes) { // * log
-        var interactionSubsetQueues = {};
-        ial.interactionQueue = ial.log.getInteractionQueue(); 
-
-        if (typeof time === 'undefined') time = ial.interactionQueue.length;
-
-        if (time instanceof Date) {
-            interactionSubsetQueues = {};
-            for (var i = 0; i < ial.interactionQueue.length; i++) {
-                var curLog = ial.interactionQueue[i];
-                var curTime = curLog.eventTimeStamp;
-                var curEventType = curLog.customLogInfo.eventType;
-                if (curEventType === 'undefined') curEventType = 'uncategorized';
-                if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
-                    var curQueue = [];
-                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
-
-                    curQueue.push(curLog);
-                    interactionSubsetQueues[curEventType] = curQueue;
-                }
-            }
-        } else if (!isNaN(parseInt(time))) {
-            interactionSubsetQueues = {};
-            if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
-            var i = 0;
-            var numLogs = 0;
-            while (i < ial.interactionQueue.length && numLogs <= time) {
-                var curLog = ial.interactionQueue[i];
-                var curEventType = curLog.customLogInfo.eventType;
-                if (curEventType === 'undefined') curEventType = 'uncategorized';
-                if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
-                    var curQueue = [];
-                    if (interactionSubsetQueues.hasOwnProperty(curEventType)) curQueue = interactionSubsetQueues[curEventType];
-
-                    curQueue.push(curLog);
-                    interactionSubsetQueues[curEventType] = curQueue;
-                    numLogs++;
-                }
-                i++;
-            }
-        }
-
-        return interactionSubsetQueues;
-    }
     
- // private
- // 'time' can be a Date object; returns all interactions that occurred since 'time'
- // 'time' can be an integer; returns the last 'time' interactions
- // interactionTypes defines which types of interactions to consider
-     function getInteractionQueueSubsetByDataPoint(time, interactionTypes) { // * log
-         var interactionSubsetQueues = {};
-         ial.interactionQueue = ial.log.getInteractionQueue(); 
-
-         if (typeof time === 'undefined') time = ial.interactionQueue.length;
-
-         if (time instanceof Date) {
-             interactionSubsetQueues = {};
-             for (var i = 0; i < ial.interactionQueue.length; i++) {
-                 var curLog = ial.interactionQueue[i];
-                 var curTime = curLog.eventTimeStamp;
-                 var curData = curLog.dataItem;
-                 var curEventType = curLog.customLogInfo.eventType;
-                 if (curEventType === 'undefined') curEventType = 'uncategorized';
-                 if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1)) {
-                     var curQueue = [];
-                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
-
-                     curQueue.push(curLog);
-                     interactionSubsetQueues[curData.ial.id] = curQueue;
-                 }
-             }
-         } else if (!isNaN(parseInt(time))) {
-             interactionSubsetQueues = {};
-             if (time > ial.interactionQueue.length) time = ial.interactionQueue.length;
-             var i = 0;
-             var numLogs = 0;
-             while (i < ial.interactionQueue.length && numLogs <= time) {
-                 var curLog = ial.interactionQueue[i];
-                 var curData = curLog.dataItem;
-                 var curEventType = curLog.customLogInfo.eventType;
-                 if (curEventType === 'undefined') curEventType = 'uncategorized';
-                 if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
-                     var curQueue = [];
-                     if (interactionSubsetQueues.hasOwnProperty(curData.ial.id)) curQueue = interactionSubsetQueues[curData.ial.id];
-
-                     curQueue.push(curLog);
-                     interactionSubsetQueues[curData.ial.id] = curQueue;
-                     numLogs++;
-                 }
-                 i++;
-             }
-         }
-
-         return interactionSubsetQueues;
-     }
-
-// private
-// arg can be a Date object; returns all interactions that occurred since 'time'
-// arg can be an integer; returns the last 'time' interactions
-    function getWeightVectorQueueSubset(time) { // * log
-        ial.attributeWeightVectorQueue = ial.log.getAttributeWeightVectorQueue();
-        var weightVectorSubset = ial.log.getAttributeWeightVectorQueue();
-
-        if (typeof time !== 'undefined') {
-            if (time instanceof Date) {
-                weightVectorSubset = [];
-                for (var i = 0; i < ial.attributeWeightVectorQueue.length; i++) {
-                    var curTime = ial.attributeWeightVectorQueue[i].eventTimeStamp;
-                    if (curTime.getTime() >= time.getTime()) weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
-                }
-            } else if (!isNaN(parseInt(time))) {
-                weightVectorSubset = [];
-                if (time > ial.attributeWeightVectorQueue.length) time = ial.attributeWeightVectorQueue.length;
-                for (var i = 0; i < time; i++)
-                    weightVectorSubset.push(ial.attributeWeightVectorQueue[i]);
-            }
-        }
-
-        return weightVectorSubset;
-    }
-
-// private
+    // private
 // computes variance for numerical attributes and entropy for categorical attributes
 // entropy ref: http://www.cs.rochester.edu/u/james/CSC248/Lec6.pdf
     function computeAttributeVariance(data, attr) { // * usermodel.bias
@@ -2126,13 +2038,132 @@
     	ial.biasLogs.push(currentLog);
     	return currentLog;
     }
+     
+
+    /*
+     * --------------------
+     *    IAL.ANALYTICS
+     * --------------------
+     */
+     
+     
+     /*
+     * Cluster data structure
+     * */
+
+    var Cluster = function(id) { // * analytics
+        this.clusterId = id;
+        this.clusterLabel = "";
+        this.dataItems = [];
+    };
+
+    Cluster.prototype.getClusterId = function() {
+        return this.clusterId;
+    };
+
+    Cluster.prototype.setClusterLabel = function(label) {
+        this.clusterLabel = label;
+    };
+
+    Cluster.prototype.getClusterLabel = function() {
+        return this.clusterLabel;
+    };
+
+    Cluster.prototype.addDataItem = function(dataItemOrId) { //TO-DO: handle ids and objects
+        this.dataItems.push(dataItemOrId);
+    };
+
+    Cluster.prototype.removeDataItem = function(dataItemOrId) { //TO-DO: handle ids and objects
+        this.dataItems.push(dataItemOrId);
+    };
+
+    Cluster.prototype.getClusterDataItems = function() {
+        return this.dataItems;
+    };
+
+    ial.analytics.createClusters = function(dataItems, knnDistance) {
+        dataItems = typeof dataItems !== 'undefined' ? dataItems : ial.dataSet;
+        knnDistance = typeof knnDistance !== 'undefined' ? knnDistance : 0.05;
+        ial.clusters = ial.analytics.classify(dataItems, knnDistance);
+        return ial.clusters;
+    };
+
+    ial.analytics.classify = function(dataPoints, knnDistance) {
+        var aggregateScores = [];
+
+        var tempStringId = 10,
+            tempStringValMap = {};
+
+        /* Use the attribute weight vector for these computations. */
+        for (var index in dataPoints) {
+            aggregateScores[index] = {};
+            aggregateScores[index]["ial"] = {};
+            aggregateScores[index]["ial"]["id"] = dataPoints[index]["ial"]["id"];
+            aggregateScores[index]["ial"]["aggregateScore"] = 0;
+            for (var attributeName in ial.attributeWeightVector) {
+                var attributeValue = ial.getNormalizedAttributeValue(dataPoints[index][attributeName],attributeName);
+                var attributeWeight = ial.attributeWeightVector[attributeName];
+
+                if(attributeName!='ial'){
+                    if(ial.attributeValueMap[attributeName]['dataType']=='categorical'){
+                        if (Object.keys(tempStringValMap).indexOf(attributeValue) == -1) { // if string not found in tempStringValMap i.e. is a new category string
+                            tempStringValMap[attributeValue] = tempStringId;
+                            attributeValue = tempStringId;
+                            tempStringId += 10;
+                        } else {
+                            attributeValue = tempStringValMap[attributeValue];
+                        }
+                        aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
+                    }else{
+                        aggregateScores[index]["ial"]["aggregateScore"] += attributeValue * attributeWeight;
+                    }
+                }
+            }
+            aggregateScores[index]["ial"]["aggregateScore"] *= dataPoints[index]["ial"]["weight"];
+        }
+        
+        aggregateScores.sort(function(a, b) {
+            return b["ial"]["aggregateScore"] - a["ial"]["aggregateScore"];
+        });
+
+        var clusters = [];
+        var clusterIndex = -1;
+        for (var index in aggregateScores) {
+            if (clusters.length == 0) {
+                clusterIndex += 1;
+                var cluster = new Cluster(clusterIndex);
+                var curDataObj = ial.ialIdToDataMap[aggregateScores[index]["ial"]["id"]];
+                curDataObj.ial.KNNClusterId = cluster.getClusterId();
+                cluster.addDataItem(curDataObj);
+                clusters.push(cluster);
+            } else {
+                var previousObject = aggregateScores[index - 1];
+                var currentObject = aggregateScores[index];
+
+                if (Math.abs(currentObject["ial"]["aggregateScore"] - previousObject["ial"]["aggregateScore"]) <= knnDistance) {
+                    var curDataObj = ial.ialIdToDataMap[currentObject["ial"]['id']];
+                    curDataObj.ial.KNNClusterId = cluster.getClusterId();
+                    cluster.addDataItem(curDataObj);
+                } else {
+                    clusterIndex += 1;
+                    var cluster = new Cluster(clusterIndex);
+                    var curDataObj = ial.ialIdToDataMap[aggregateScores[index]["ial"]['id']];
+                    curDataObj.ial.KNNClusterId = cluster.getClusterId();
+                    cluster.addDataItem(curDataObj);
+                    clusters.push(cluster);
+                }
+            }
+        }
+        return clusters;
+    };
 
 	
     /*
      * ---------------------
-     *   Utility functions
+     *     IAL.UTILS
      * ---------------------
-     * */
+     */
+     
 
     ial.utils = {}
     ial.utils.logGamma = function(x) {
@@ -2230,6 +2261,15 @@
         return list.sort(compare);
     }
     
+    
+    
+	/*
+     * -----------------------------------------------
+     * NEEDS UPDATED INTEGRATION WITH STATS LIBRARIES
+     * -----------------------------------------------
+     */
+     
+    
 /** Probability Distributions **/
 
     
@@ -2248,7 +2288,7 @@
     
     // private
     // get the percent probability given the two distributions
-    // TODO: taken from jerzy library -- figure out how to integrate Node.js to use library directly
+    // TODO: taken from jerzy library -- integrate Node.js to use library directly
     function getKSPercent(x, y) { // * usermodel.bias
     	var all = new Vector(x.elements.concat(y.elements)).sort();
     	var ecdfx = x.ecdf(all);
@@ -2264,6 +2304,105 @@
     		"p": p
     	};
     }
+    
+    function LogGamma(Z) {
+    	with (Math) {
+    		var S = 1 + 76.18009173 / Z - 86.50532033 / (Z + 1) + 24.01409822 / (Z + 2) - 1.231739516 / (Z + 3) + 0.00120858003 / (Z + 4) - 0.00000536382 / (Z + 5);
+    		var LG = (Z - 0.5) * log(Z + 4.5) - (Z + 4.5) + log(S * 2.50662827465);
+    	}
+    	return LG;
+    }
+
+    function Betinc(X, A, B) {
+    	var A0 = 0;
+    	var B0 = 1;
+    	var A1 = 1;
+    	var B1 = 1;
+    	var M9 = 0;
+    	var A2 = 0;
+    	var C9;
+    	while (Math.abs((A1 - A2) / A1) > 0.00001) {
+    		A2 = A1;
+    		C9 = -(A + M9) * (A + B + M9) * X / (A + 2 * M9) / (A + 2 * M9 + 1);
+    		A0 = A1 + C9 * A0;
+    		B0 = B1 + C9 * B0;
+    		M9 = M9 + 1;
+    		C9 = M9 * (B - M9) * X / (A + 2 * M9 - 1) / (A + 2 * M9);
+    		A1 = A0 + C9 * A1;
+    		B1 = B0 + C9 * B1;
+    		A0 = A0 / B1;
+    		B0 = B0 / B1;
+    		A1 = A1 / B1;
+    		B1 = 1;
+    	}
+    	return A1 / A;
+    }
+
+    function Betacdf(Z, A, B) {
+        var S;
+        var BT;
+        var Bcdf;
+    	with (Math) {
+    		S = A + B;
+    		BT = exp(LogGamma(S) - LogGamma(B) - LogGamma(A) + A * log(Z) + B * log(1 - Z));
+    		if (Z < (A + 1) / (S + 2))
+    			Bcdf = BT * Betinc(Z, A, B)
+    		else
+    			Bcdf = 1 - BT * Betinc(1 - Z, B, A)
+    	}
+    	return Bcdf;
+    }
+
+	function Gcf(X, A) { // Good for X > A + 1
+		with (Math) {
+			var A0 = 0;
+			var B0 = 1;
+			var A1 = 1;
+			var B1 = X;
+			var AOLD = 0;
+			var N = 0;
+			while (abs((A1 - AOLD) / A1) > 0.00001) {
+				AOLD = A1;
+				N = N + 1;
+				A0 = A1 + (N - A) * A0;
+				B0 = B1 + (N - A) * B0;
+				A1 = X * A0 + N * A1;
+				B1 = X * B0 + N * B1;
+				A0 = A0 / B1;
+				B0 = B0 / B1;
+				A1 = A1 / B1;
+				B1 = 1;
+			}
+			var Prob = exp(A * log(X) - X - LogGamma(A)) * A1;
+		}
+		return 1 - Prob;
+	}
+
+	function Gser(X, A) { // Good for X < A + 1.
+	    with (Math) {
+			var T9 = 1 / A;
+			var G = T9;
+			var I = 1;
+			while (T9 > G * 0.00001) {
+				T9 = T9 * X / (A + I);
+				G = G + T9;
+				I = I + 1;
+			}
+			G = G * exp(A * log(X) - X - LogGamma(A));
+	    }
+	    return G;
+	}
+
+	function Gammacdf(x, a) {
+		var GI;
+		if (x <= 0)
+			GI = 0;
+		else if (x < a + 1)
+			GI = Gser(x, a);
+		else
+			GI = Gcf(x, a);
+		return GI;
+	}
     
     /** Jerzy vector **/
     
@@ -2575,103 +2714,4 @@
     		return t;
     	})(this, x);
     };
-    
-	function LogGamma(Z) {
-    	with (Math) {
-    		var S = 1 + 76.18009173 / Z - 86.50532033 / (Z + 1) + 24.01409822 / (Z + 2) - 1.231739516 / (Z + 3) + 0.00120858003 / (Z + 4) - 0.00000536382 / (Z + 5);
-    		var LG = (Z - 0.5) * log(Z + 4.5) - (Z + 4.5) + log(S * 2.50662827465);
-    	}
-    	return LG;
-    }
-
-    function Betinc(X, A, B) {
-    	var A0 = 0;
-    	var B0 = 1;
-    	var A1 = 1;
-    	var B1 = 1;
-    	var M9 = 0;
-    	var A2 = 0;
-    	var C9;
-    	while (Math.abs((A1 - A2) / A1) > 0.00001) {
-    		A2 = A1;
-    		C9 = -(A + M9) * (A + B + M9) * X / (A + 2 * M9) / (A + 2 * M9 + 1);
-    		A0 = A1 + C9 * A0;
-    		B0 = B1 + C9 * B0;
-    		M9 = M9 + 1;
-    		C9 = M9 * (B - M9) * X / (A + 2 * M9 - 1) / (A + 2 * M9);
-    		A1 = A0 + C9 * A1;
-    		B1 = B0 + C9 * B1;
-    		A0 = A0 / B1;
-    		B0 = B0 / B1;
-    		A1 = A1 / B1;
-    		B1 = 1;
-    	}
-    	return A1 / A;
-    }
-
-    function Betacdf(Z, A, B) {
-        var S;
-        var BT;
-        var Bcdf;
-    	with (Math) {
-    		S = A + B;
-    		BT = exp(LogGamma(S) - LogGamma(B) - LogGamma(A) + A * log(Z) + B * log(1 - Z));
-    		if (Z < (A + 1) / (S + 2))
-    			Bcdf = BT * Betinc(Z, A, B)
-    		else
-    			Bcdf = 1 - BT * Betinc(1 - Z, B, A)
-    	}
-    	return Bcdf;
-    }
-
-	function Gcf(X, A) { // Good for X > A + 1
-		with (Math) {
-			var A0 = 0;
-			var B0 = 1;
-			var A1 = 1;
-			var B1 = X;
-			var AOLD = 0;
-			var N = 0;
-			while (abs((A1 - AOLD) / A1) > 0.00001) {
-				AOLD = A1;
-				N = N + 1;
-				A0 = A1 + (N - A) * A0;
-				B0 = B1 + (N - A) * B0;
-				A1 = X * A0 + N * A1;
-				B1 = X * B0 + N * B1;
-				A0 = A0 / B1;
-				B0 = B0 / B1;
-				A1 = A1 / B1;
-				B1 = 1;
-			}
-			var Prob = exp(A * log(X) - X - LogGamma(A)) * A1;
-		}
-		return 1 - Prob;
-	}
-
-	function Gser(X, A) { // Good for X < A + 1.
-	    with (Math) {
-			var T9 = 1 / A;
-			var G = T9;
-			var I = 1;
-			while (T9 > G * 0.00001) {
-				T9 = T9 * X / (A + I);
-				G = G + T9;
-				I = I + 1;
-			}
-			G = G * exp(A * log(X) - X - LogGamma(A));
-	    }
-	    return G;
-	}
-
-	function Gammacdf(x, a) {
-		var GI;
-		if (x <= 0)
-			GI = 0;
-		else if (x < a + 1)
-			GI = Gser(x, a);
-		else
-			GI = Gcf(x, a);
-		return GI;
-	}
 })();
