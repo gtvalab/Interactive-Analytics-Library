@@ -197,7 +197,7 @@
             })
             .style("fill", function(d) {return color(d[coloringAttribute]); })
             .style("opacity", 1);
-
+        		
         d3.selectAll('.dot').on('click', function (d) {
             if (timer) clearTimeout(timer);
             timer = setTimeout(function() {
@@ -221,8 +221,7 @@
                 if(typeof(hoverSliderObj) != 'undefined'){
                     hoverWeight = hoverSliderObj.value();
                 }
-                //ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
-                ial.log.log(d, new Date(), 'hover');
+                ial.usermodel.incrementItemWeight(d,hoverWeight,true,{'level':'INFO','eventType':'hover'});
                 tip.show(d);
             })
             .on('mouseout', tip.hide);
@@ -327,7 +326,7 @@
 
     main.drawProvenanceView = function (width,height) {
         var topNPoints = ial.usermodel.getTopNPointsByInteractionWeights(12);
-        var dataItemSessionLogs = ial.log.getDataItemLogs();
+        var dataItemSessionLogs = ial.log.getItemLogs();
         var distributionMap = {};
         for(var i in topNPoints){
             var point = topNPoints[i];
@@ -594,22 +593,20 @@
     });
 
     $("#createClusterButton").click(function (ev) {
-        computeClusters();
-    });
-    function computeClusters(){
-        var clusterList = ial.analytics.createClusters();
+    	var clusterList = ial.analytics.createClusters();
         activeClusterList = clusterList;
         //console.log(clusterList);
-    }
+    });
+    
+    $("#groupClustersButton").click(function (ev) {
+    	main.drawKNN(params.width, params.height, activeClusterList);
+    });
 
     $("#colorByClusterButton").click(function (ev) {
-        colorByClusters();
-    });
-    function colorByClusters(){
-        d3.selectAll('.dot').transition().duration(1000).style('fill',function(d){
+        d3.selectAll('.dot').transition().duration(1000).style('fill', function(d) {
             return color(d.ial.KNNClusterId);
-        })
-    }
+        });
+    });
 
     $("#resetAttributeWeightsButton").click(function (ev) {
         ial.usermodel.resetAttributeWeightVector(true, {'level':'INFO','eventType':'reset_attribute_weight_vector'});
@@ -843,10 +840,6 @@
         bugout.clear(); 
     });
 
-    $("#groupClustersButton").click(function (ev) {
-       main.drawKNN(params.width,params.height,activeClusterList)
-    });
-
     $("#nullifyAttributeWeightsButton").click(function(ev){
         ial.usermodel.nullifyAttributeWeightVector(true,{'level':'DEBUG'});
         updateAttributeWeightDiv();
@@ -918,7 +911,7 @@
             return textFile;
         };
         var link = document.getElementById('downloadlink');
-        var sessionLogs = ial.getSessionLogs();
+        var sessionLogs = ial.log.getSessionLogs();
         link.href = makeTextFile(JSON.stringify(sessionLogs, null, '\t'));
         link.download="sessionLogs.json";
         link.click();
