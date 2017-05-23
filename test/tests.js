@@ -74,8 +74,8 @@
     	                       }
     	                      ];
     	
-    	for (var i = 0; i < interactionLogs.length; i++) ial.interactionEnqueue(interactionLogs[i]);
-    	console.log("Interactions enqueued", ial.getInteractionQueue());
+    	for (var i = 0; i < interactionLogs.length; i++) ial.log.enqueue(interactionLogs[i]);
+    	console.log("Interactions enqueued", ial.log.getItemLogs());
     	
     	// create the attribute weight logs
     	var weightVector1 = {
@@ -99,29 +99,39 @@
     	                        	   "eventName":"AttributeWeightChange_UPDATE",
     	                        	   "oldWeight":weightVector1,
     	                        	   "newWeight":weightVector2,
-    	                        	   "eventTimeStamp":new Date("July 14, 2016 09:44:30")
+    	                        	   "eventTimeStamp":new Date("July 14, 2016 09:44:30"),
+    	                        	   "customLogInfo":{
+    	                    		   		"eventType":"weight_update"
+    	                    	   		}
     	                           },
     	                           {
     	                        	   "dataItem":weightVector2,
     	                        	   "eventName":"AttributeWeightChange_UPDATE",
     	                        	   "oldWeight":weightVector2,
     	                        	   "newWeight":weightVector3,
-    	                        	   "eventTimeStamp":new Date("July 14, 2016 09:44:30")
+    	                        	   "eventTimeStamp":new Date("July 14, 2016 09:44:30"),
+    	                        	   "customLogInfo":{
+    	                    		   		"eventType":"weight_update"
+    	                    	   		}
     	                           }
     	                          ];
     	
-    	for (var i = 0; i < attributeWeightLogs.length; i++) ial.attributeWeightVectorEnqueue(attributeWeightLogs[i]);
-    	console.log("Attribute weight logs enqueued", ial.getAttributeWeightVectorQueue());
+    	for (var i = 0; i < attributeWeightLogs.length; i++) ial.log.enqueue(attributeWeightLogs[i]);
+    	console.log("Attribute weight logs enqueued", ial.log.getAttributeLogs());
     	
     	// test the bias metrics
-    	var subsetRes = ial.computeSubsetBias(); 
-    	console.log("Subset metric", subsetRes);
-    	var varRes = ial.computeVarianceBias();
-    	console.log("Variance metric", varRes);
-    	var repRes = ial.computeRepetitionBias();
-    	console.log("Repetition metric", repRes);
-    	var attrRes = ial.computeAttributeWeightBias();
-    	console.log("Attribute Weight metric", attrRes);
+    	var dPC = ial.usermodel.bias.computeDataPointCoverage();
+    	console.log("Data Point Coverage Metric", dPC);
+    	var dPD = ial.usermodel.bias.computeDataPointDistribution();
+    	console.log("Data Point Distribution Metric", dPD);
+    	var aC = ial.usermodel.bias.computeAttributeCoverage();
+    	console.log("Attribute Coverage Metric", aC);
+    	var aD = ial.usermodel.bias.computeAttributeDistribution();
+    	console.log("Attribute Distribution Metric", aD);
+    	var aWC = ial.usermodel.bias.computeAttributeWeightCoverage();
+    	console.log("Attribute Weight Coverage Metric", aWC);
+    	var aWD = ial.usermodel.bias.computeAttributeWeightDistribution();
+    	console.log("Attribute Weight Distribution Metric", aWD);
     }
 
     function dataAdditionTest() {

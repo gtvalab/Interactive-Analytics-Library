@@ -457,6 +457,21 @@
 		}
 		return attributeLogList;
 	};
+	
+	/*
+	 * Print the contents of the session logs
+	 */
+	ial.log.printSessionLogs = function() {
+		console.log("Printing Session Logs (" + ial.sessionLogs.length + "): ");
+		for (var i in ial.sessionLogs) console.log(ial.sessionLogs[i]);
+	};
+	
+	/*
+	 * Set the maximum number of logs to track
+	 */
+	ial.log.setMaxQueueSize = function(newQueueSize) {
+		ial.maxQueueSize = newQueueSize; 
+	};
 
 	/*
 	 * Enqueue a log
@@ -479,21 +494,6 @@
 		return ial.sessionLogs.shift(); 
 	};
 
-	/*
-	 * Set the maximum number of logs to track
-	 */
-	ial.log.setMaxQueueSize = function(newQueueSize) {
-		ial.maxQueueSize = newQueueSize; 
-	};
-
-	/*
-	 * Print the contents of the session logs
-	 */
-	ial.log.printSessionLogs = function() {
-		console.log("Printing Session Logs (" + ial.sessionLogs.length + "): ");
-		for (var i in ial.sessionLogs) console.log(ial.sessionLogs[i]);
-	};
-
 	/* 
 	 * private
 	 * Filter the given logs by time and / or interaction types
@@ -511,7 +511,8 @@
 			for (var i = 0; i < logs.length; i++) {
 				var curLog = logs[i];
 				var curTime = curLog.eventTimeStamp;
-				var curEventType = curLog['customLogInfo']['eventType'];
+				var curEventType = curLog.customLogInfo.eventType;
+				if (curEventType === 'undefined') curEventType = 'uncategorized';
 				if (curTime.getTime() >= time.getTime() && (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1))
 					logSubset.push(logs[i]);
 			}
@@ -521,7 +522,8 @@
 			var i = logs.length - 1;
 			while (i >= 0 && numLogs <= time) {
 				var curLog = logs[i];
-				var curEventType = curLog['customLogInfo']['eventType'];
+				var curEventType = curLog.customLogInfo.eventType;
+				if (curEventType === 'undefined') curEventType = 'uncategorized';
 				if (typeof interactionTypes == 'undefined' || interactionTypes.indexOf(curEventType) > -1) {
 					logSubset.push(curLog);
 					numLogs++;
@@ -586,66 +588,39 @@
 	 *    IAL.USERMODEL
 	 * --------------------
 	 */
-
-
+	 
+	
+	/* ITEM WEIGHTS */
+	
+	
 	/*
-	 * Computes item score
-	 * params: data point object, current attribute weight vector
+	 * Gets the item weight vector
 	 */
-	ial.usermodel.getItemScore = function(d, attributeVector) {
-		var score = 0.0;
-		for (var attribute in attributeVector) {
-			if (!isNaN(d[attribute])) {
-				var attributeVal = ial.getNormalizedAttributeValue(d[attribute], attribute);
-				attributeVal *= attributeVector[attribute];
-				score += attributeVal;
-			}
-		}
-		
-		score = parseFloat(Math.round(score * 10000) / 10000).toFixed(4);
-		return score;
-	}; // TODO: how to treat categorical attributes for this score?
-
-
+	ial.usermodel.getItemWeightVector = function () {
+		var itemWeightVector = {};
+		for (var d in ial.dataSet) 
+			itemWeightVector[d.ial.id] = d.ial.weight;
+			
+		return itemWeightVector;
+	}
+	
 	/*
-	 * Updates item scores for all data points
-	 */
-	ial.usermodel.updateItemScores = function () {
-		for (var ialId in ial.ialIdToDataMap) {
-			var d = ial.ialIdToDataMap[ialId];
-			if (ial.useNormalizedAttributeWeights == 1)
-				d.ial.itemScore = parseFloat(ial.usermodel.getItemScore(d, ial.normAttributeWeightVector));
-			else
-				d.ial.itemScore = parseFloat(ial.usermodel.getItemScore(d, ial.attributeWeightVector));
-		}
-	};
-
-	/*
-	 * Normalize weight vector 
+	 * Gets the normalized item weight vector
 	 * method (optional) can be 'sum' or 'range'
-	 *     'sum' (default) will normalize so that the absolute value of all of the weights sum to 1 
-	 *     'range' will normalize so that each weight falls between ial.minWeight and ial.maxWeight
+	 *   'sum' (default) will normalize so that the absolute value of all of the weights sum to 1 
+	 *   'range' will normalize so that each weight falls between ial.minWeight and ial.maxWeight
 	 */
-	ial.usermodel.normalizeAttributeWeightVector = function (method) {
-		ial.normAttributeWeightVector = getNormalizedMap(ial.attributeWeightVector, method);
-		return ial.normAttributeWeightVector;
-	};
-
-	/*
-	 * Normalize input map 
-	 * method (optional) can be 'sum' or 'range'
-	 *     'sum' (default) will normalize so that the absolute value of all of the weights sum to 1 
-	 *     'range' will normalize so that each weight falls between ial.minWeight and ial.maxWeight
-	 */
-	var getNormalizedMap = function (inputMap, method) {
+	ial.usermodel.getNormalizedItemWeightVector = function (method) {
 		if (method != 'sum' && method != 'range') method = 'sum';
+		var itemWeightVector = ial.usermodel.getItemWeightVector();
+		var normItemWeightVector = {};
 		
 		if (method == 'sum') {
 			var activeSum = 0;
-			for (var attribute in inputMap) activeSum += Math.abs(inputMap[attribute]);
-			for (var attribute in inputMap) {
+			for (var item in itemWeightVector) activeSum += Math.abs(itemWeightVector[item]);
+			for (var item in itemWeightVector) {
 				if (activeSum != 0) 
-					inputMap[attribute] = inputMap[attribute]/activeSum;
+					normItemWeightVector[item] = itemWeightVector[item] / activeSum;
 			}
 		} else {
 			var a = ial.minWeight, b = ial.maxWeight;
@@ -653,19 +628,19 @@
 			var max = Number.MIN_VALUE;
 			
 			// find min and max
-			for (var attribute in inputMap) {
-				if (inputMap[attribute] < min) min = inputMap[attribute]; 
-				if (inputMap[attribute] > max) max = inputMap[attribute]; 
+			for (var item in itemWeightVector) {
+				if (itemWeightVector[item] < min) min = itemWeightVector[item]; 
+				if (itemWeightVector[item] > max) max = itemWeightVector[item]; 
 			}
 			
 			// normalize between min and max
-			for (var attribute in inputMap)
-				inputMap[attribute] = ((b - a) * (inputMap[attribute] - min) / (max - min)) + a;
+			for (var item in itemWeightVector)
+				normItemWeightVector[item] = ((b - a) * (itemWeightVector[item] - min) / (max - min)) + a;
 		}
-
-		return inputMap;
-	}; 
-
+			
+		return normItemWeightVector;
+	}
+	
 	/*
 	 * Sets item weight to new value
 	 */
@@ -703,12 +678,27 @@
 
 		if (logEvent == true) ial.log.enqueue(logObj);
 	};
-
+	
+	
+	/* ATTRIBUTE WEIGHTS */
+	
+	
 	/*
 	 * Returns current attributeWeightVector
 	 */
 	ial.usermodel.getAttributeWeightVector = function() {
 		return ial.utils.clone(ial.attributeWeightVector);
+	};
+	
+	/*
+	 * Normalize weight vector 
+	 * method (optional) can be 'sum' or 'range'
+	 *     'sum' (default) will normalize so that the absolute value of all of the weights sum to 1 
+	 *     'range' will normalize so that each weight falls between ial.minWeight and ial.maxWeight
+	 */
+	ial.usermodel.normalizeAttributeWeightVector = function (method) {
+		ial.normAttributeWeightVector = getNormalizedMap(ial.attributeWeightVector, method);
+		return ial.normAttributeWeightVector;
 	};
 	
 	/*
@@ -720,7 +710,7 @@
 		else
 			return ial.attributeWeightVector;
 	};
-
+	
 	/*
 	 * Returns requested attribute's weight
 	 */
@@ -730,7 +720,38 @@
 		else
 			throw "Attribute not available or not specifed in weight vector during initialization."
 	};
+	
+	/*
+	 * Sets the attribute weight vector to the newly passed map
+	 */
+	ial.usermodel.setAttributeWeightVector = function(newAttributeWeightVector, logEvent, additionalLogInfoMap) {
+		logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
+		additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
+		var logObj = new LogObj(ial.utils.clone(ial.attributeWeightVector));
+		logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
+		logObj.setEventName('AttributeWeightChange_SETALL');
+
+		ial.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
+		for (var attribute in ial.attributeWeightVector) {
+			if (ial.attributeWeightVector[attribute] > ial.maxWeight) 
+				ial.attributeWeightVector[attribute] = ial.maxWeight;
+			if (ial.attributeWeightVector[attribute] < ial.minWeight)
+				ial.attributeWeightVector[attribute] = ial.minWeight;
+		}
+
+		logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
+		if (additionalLogInfoMap != {})
+			logObj.setCustomLogInfo(additionalLogInfoMap);
+
+		if (logEvent == true) ial.log.enqueue(logObj);
+		
+		if (ial.useNormalizedAttributeWeights == 1)
+			ial.usermodel.normalizeAttributeWeightVector();
+
+		ial.usermodel.updateItemScores();
+	};
+	
 	/*
 	 * Sets attribute's weight to newWeight.
 	 */
@@ -776,37 +797,6 @@
 		logObj.setNewWeight(ial.attributeWeightVector[attribute]);
 
 		if (logEvent == true) ial.log.enqueue(logObj);
-
-		ial.usermodel.updateItemScores();
-	};
-
-	/*
-	 * Sets the attribute weight vector to the newly passed map
-	 */
-	ial.usermodel.setAttributeWeightVector = function(newAttributeWeightVector, logEvent, additionalLogInfoMap) {
-		logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
-		additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
-
-		var logObj = new LogObj(ial.utils.clone(ial.attributeWeightVector));
-		logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
-		logObj.setEventName('AttributeWeightChange_SETALL');
-
-		ial.attributeWeightVector = ial.utils.clone(newAttributeWeightVector);
-		for (var attribute in ial.attributeWeightVector) {
-			if (ial.attributeWeightVector[attribute] > ial.maxWeight) 
-				ial.attributeWeightVector[attribute] = ial.maxWeight;
-			if (ial.attributeWeightVector[attribute] < ial.minWeight)
-				ial.attributeWeightVector[attribute] = ial.minWeight;
-		}
-
-		logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
-		if (additionalLogInfoMap != {})
-			logObj.setCustomLogInfo(additionalLogInfoMap);
-
-		if (logEvent == true) ial.log.enqueue(logObj);
-		
-		if (ial.useNormalizedAttributeWeights == 1)
-			ial.usermodel.normalizeAttributeWeightVector();
 
 		ial.usermodel.updateItemScores();
 	};
@@ -863,6 +853,40 @@
 		ial.usermodel.updateItemScores();
 	};
 
+
+	/* SCORES */
+	
+	
+	/*
+	 * Computes item score
+	 * params: data point object, current attribute weight vector
+	 */
+	ial.usermodel.getItemScore = function(d, attributeVector) {
+		var score = 0.0;
+		for (var attribute in attributeVector) {
+			if (!isNaN(d[attribute])) {
+				var attributeVal = ial.getNormalizedAttributeValue(d[attribute], attribute);
+				attributeVal *= attributeVector[attribute];
+				score += attributeVal;
+			}
+		}
+		
+		score = parseFloat(Math.round(score * 10000) / 10000).toFixed(4);
+		return score;
+	}; // TODO: how to treat categorical attributes for this score?
+
+	/*
+	 * Updates item scores for all data points
+	 */
+	ial.usermodel.updateItemScores = function () {
+		for (var ialId in ial.ialIdToDataMap) {
+			var d = ial.ialIdToDataMap[ialId];
+			if (ial.useNormalizedAttributeWeights == 1)
+				d.ial.itemScore = parseFloat(ial.usermodel.getItemScore(d, ial.normAttributeWeightVector));
+			else
+				d.ial.itemScore = parseFloat(ial.usermodel.getItemScore(d, ial.attributeWeightVector));
+		}
+	};
 
 	/*
 	 * Returns top N points based on interaction weight (a.k.a. weight)
@@ -1024,32 +1048,6 @@
 		}
 	};
 
-	/* 
-	 * Get the variance of the array 
-	 */
-	function getVariance(arr) {
-
-		function getVariance(arr, mean) {
-			return arr.reduce(function(pre, cur) {
-				pre = pre + Math.pow((cur - mean), 2);
-				return pre;
-			}, 0)
-		}
-
-		var meanTot = arr.reduce(function(pre, cur) {
-			return pre + cur;
-		})
-		var total = getVariance(arr, meanTot / arr.length);
-
-		var res = {
-				mean: meanTot / arr.length,
-				variance: total / arr.length
-		}
-
-		return res.variance;
-	}
-
-
 	/*
 	 * Returns an attribute weight vector generated based on similarity between given points
 	 */
@@ -1117,19 +1115,6 @@
 
 		return tempAttributeWeightVector;
 	};
-
-	/*
-	 * Returns an array representing only the unique items from arr
-	 */
-	function getUniqueList(arr){
-		var uniqueList = [];
-		for (var i in arr) {
-			if (uniqueList.indexOf(arr[i]) == -1)
-				uniqueList.push(arr[i]);
-		}
-		
-		return uniqueList;
-	}
 
 	/*
 	 * Returns an attribute weight vector generated based on difference between given points
@@ -1291,7 +1276,80 @@
 			return variance;
 		} else return 0;
 	}
+	
+	/* 
+	 * Get the variance of the array 
+	 */
+	function getVariance(arr) {
 
+		function getVariance(arr, mean) {
+			return arr.reduce(function(pre, cur) {
+				pre = pre + Math.pow((cur - mean), 2);
+				return pre;
+			}, 0)
+		}
+
+		var meanTot = arr.reduce(function(pre, cur) {
+			return pre + cur;
+		})
+		var total = getVariance(arr, meanTot / arr.length);
+
+		var res = {
+				mean: meanTot / arr.length,
+				variance: total / arr.length
+		}
+
+		return res.variance;
+	}
+	
+	/*
+	 * Returns an array representing only the unique items from arr
+	 */
+	function getUniqueList(arr){
+		var uniqueList = [];
+		for (var i in arr) {
+			if (uniqueList.indexOf(arr[i]) == -1)
+				uniqueList.push(arr[i]);
+		}
+		
+		return uniqueList;
+	}
+
+	/*
+	 * Normalize input map 
+	 * method (optional) can be 'sum' or 'range'
+	 *     'sum' (default) will normalize so that the absolute value of all of the weights sum to 1 
+	 *     'range' will normalize so that each weight falls between ial.minWeight and ial.maxWeight
+	 */
+	var getNormalizedMap = function (inputMap, method) {
+		if (method != 'sum' && method != 'range') method = 'sum';
+		
+		if (method == 'sum') {
+			var activeSum = 0;
+			for (var attribute in inputMap) activeSum += Math.abs(inputMap[attribute]);
+			for (var attribute in inputMap) {
+				if (activeSum != 0) 
+					inputMap[attribute] = inputMap[attribute] / activeSum;
+			}
+		} else {
+			var a = ial.minWeight, b = ial.maxWeight;
+			var min = Number.MAX_VALUE;
+			var max = Number.MIN_VALUE;
+			
+			// find min and max
+			for (var attribute in inputMap) {
+				if (inputMap[attribute] < min) min = inputMap[attribute]; 
+				if (inputMap[attribute] > max) max = inputMap[attribute]; 
+			}
+			
+			// normalize between min and max
+			for (var attribute in inputMap)
+				inputMap[attribute] = ((b - a) * (inputMap[attribute] - min) / (max - min)) + a;
+		}
+
+		return inputMap;
+	}; 
+	
 	/* 
 	 * private
 	 * Computes distribution of categorical attribute values
