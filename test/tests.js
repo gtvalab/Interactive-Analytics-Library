@@ -74,8 +74,8 @@
     	                       }
     	                      ];
     	
-    	for (var i = 0; i < interactionLogs.length; i++) ial.log.enqueue(interactionLogs[i]);
-    	console.log("Interactions enqueued", ial.log.getItemLogs());
+    	for (var i = 0; i < interactionLogs.length; i++) ial.logging.enqueue(interactionLogs[i]);
+    	console.log("Interactions enqueued", ial.logging.getItemLogs());
     	
     	// create the attribute weight logs
     	var weightVector1 = {
@@ -116,8 +116,8 @@
     	                           }
     	                          ];
     	
-    	for (var i = 0; i < attributeWeightLogs.length; i++) ial.log.enqueue(attributeWeightLogs[i]);
-    	console.log("Attribute weight logs enqueued", ial.log.getAttributeLogs());
+    	for (var i = 0; i < attributeWeightLogs.length; i++) ial.logging.enqueue(attributeWeightLogs[i]);
+    	console.log("Attribute weight logs enqueued", ial.logging.getAttributeLogs());
     	
     	// test the bias metrics
     	var dPC = ial.usermodel.bias.computeDataPointCoverage();

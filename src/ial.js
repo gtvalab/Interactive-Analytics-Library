@@ -3,7 +3,7 @@
  */
 (function() {
 	ial = {};
-	ial.log = {};
+	ial.logging = {};
 	ial.usermodel = {};
 	ial.usermodel.bias = {};
 	ial.analytics = {};
@@ -365,6 +365,13 @@
 	ial.getIalIdToDataMap = function () {
 		return this.ialIdToDataMap;
 	};
+	
+	/*
+	 * Get a data item by its ial id
+	 */
+	ial.getDataById = function (id) {
+		return this.ialIdToDataMap[id];
+	};
 
 
 
@@ -418,7 +425,7 @@
 	 * d, tStamp, eventName, customInfo are optional
 	 * use LogObj functions to add other info to the log
 	 */
-	ial.log.log = function(d, tStamp, eventName, customInfo) {
+	ial.logging.log = function(d, tStamp, eventName, customInfo) {
 		var logObj = new LogObj(d, tStamp);
 		logObj.setEventName(eventName);
 		if (customInfo != {}) logObj.setCustomLogInfo(customInfo);
@@ -429,14 +436,14 @@
 	/*
 	 * Returns a copy of the session logs collected so far
 	 */
-	ial.log.getSessionLogs = function() {
+	ial.logging.getSessionLogs = function() {
 		return ial.sessionLogs.slice(0);
 	};
 
 	/*
 	 * Returns the subset of logs which involve data items.
 	 */
-	ial.log.getItemLogs = function() {
+	ial.logging.getItemLogs = function() {
 		var dataItemLogList = [];
 		for (var i in ial.sessionLogs) {
 			var logObj = ial.sessionLogs[i];
@@ -449,7 +456,7 @@
 	/*
 	 * Returns the subset of logs which involve attributes.
 	 */
-	ial.log.getAttributeLogs = function () {
+	ial.logging.getAttributeLogs = function () {
 		var attributeLogList = [];
 		for (var i in ial.sessionLogs) {
 			var logObj = ial.sessionLogs[i];
@@ -461,7 +468,7 @@
 	/*
 	 * Print the contents of the session logs
 	 */
-	ial.log.printSessionLogs = function() {
+	ial.logging.printSessionLogs = function() {
 		console.log("Printing Session Logs (" + ial.sessionLogs.length + "): ");
 		for (var i in ial.sessionLogs) console.log(ial.sessionLogs[i]);
 	};
@@ -469,19 +476,19 @@
 	/*
 	 * Set the maximum number of logs to track
 	 */
-	ial.log.setMaxQueueSize = function(newQueueSize) {
+	ial.logging.setMaxQueueSize = function(newQueueSize) {
 		ial.maxQueueSize = newQueueSize; 
 	};
 
 	/*
 	 * Enqueue a log
 	 */
-	ial.log.enqueue = function(obj) {
+	ial.logging.enqueue = function(obj) {
 		if (typeof obj === 'undefined' || obj == null) return;
 
 		if (ial.sessionLogs.length >= ial.maxQueueSize) {
 			console.log("Max queue size reached");
-			ial.log.dequeue();
+			ial.logging.dequeue();
 		}
 		
 		ial.sessionLogs.push(obj);
@@ -490,7 +497,7 @@
 	/* 
 	 * Dequeue a log
 	 */
-	ial.log.dequeue = function() {
+	ial.logging.dequeue = function() {
 		return ial.sessionLogs.shift(); 
 	};
 
@@ -502,7 +509,7 @@
 	 * interactionTypes defines which types of interactions to consider
 	 */
 	function getLogSubset(logs, time, interactionTypes) {
-		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.log.getSessionLogs());
+		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.logging.getSessionLogs());
 		var logSubset = [];
 
 		if (typeof time === 'undefined') time = logs.length;
@@ -541,7 +548,7 @@
 	 */
 	function getLogsByEventType(logs) {
 		var logSubsets = {};
-		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.log.getSessionLogs());
+		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.logging.getSessionLogs());
 
 		for (var i = 0; i < logs.length; i++) {
 			var curLog = logs[i];
@@ -563,7 +570,7 @@
 	 */
 	function getLogsByItem(logs) {
 		var logSubsets = {};
-		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.log.getSessionLogs());
+		if (typeof logs === 'undefined') logs = ial.utils.clone(ial.logging.getSessionLogs());
 
 		for (var i = 0; i < logs.length; i++) {
 			var curLog = logs[i];
@@ -657,7 +664,7 @@
 
 		d.ial.weight = newWeight;
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 	};
 
 	/*
@@ -676,7 +683,7 @@
 		logObj.setNewWeight(d.ial.weight);
 		if (additionalLogInfoMap != {}) logObj.setCustomLogInfo(additionalLogInfoMap);
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 	};
 	
 	
@@ -744,7 +751,7 @@
 		if (additionalLogInfoMap != {})
 			logObj.setCustomLogInfo(additionalLogInfoMap);
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 		
 		if (ial.useNormalizedAttributeWeights == 1)
 			ial.usermodel.normalizeAttributeWeightVector();
@@ -771,7 +778,7 @@
 
 		logObj.setNewWeight(ial.attributeWeightVector[attribute]);
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		ial.usermodel.updateItemScores();
 	};
@@ -796,7 +803,7 @@
 
 		logObj.setNewWeight(ial.attributeWeightVector[attribute]);
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		ial.usermodel.updateItemScores();
 	};
@@ -808,7 +815,7 @@
 		logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
 		additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-		var logObj = new LogObj(ial.utils.clone(ial.log.printAttributeWeightVectorQueue));
+		var logObj = new LogObj(ial.utils.clone(ial.logging.printAttributeWeightVectorQueue));
 		logObj.setOldWeight(ial.utils.clone(ial.attributeWeightVector));
 		logObj.setEventName('AttributeWeightChange_RESET');
 
@@ -821,7 +828,7 @@
 
 		logObj.setNewWeight(ial.utils.clone(ial.attributeWeightVector));
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		if (ial.useNormalizedAttributeWeights == 1) 
 			ial.usermodel.normalizeAttributeWeightVector();
@@ -848,7 +855,7 @@
 		if (additionalLogInfoMap != {})
 			logObj.setCustomLogInfo(additionalLogInfoMap);
 
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		ial.usermodel.updateItemScores();
 	};
@@ -909,7 +916,7 @@
 			logObj.setCustomLogInfo(additionalLogInfoMap);
 			
 		logObj.setEventSpecificInfo({'dataReturned':list.slice(0, N), 'N':N});
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		return list.slice(0, N);
 	};
@@ -935,7 +942,7 @@
 		if (additionalLogInfoMap != {})
 			logObj.setCustomLogInfo(additionalLogInfoMap);
 		logObj.setEventSpecificInfo({'dataReturned':topNPoints, 'N':N});
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		return topNPoints;
 	};
@@ -984,7 +991,7 @@
 		logObj.setNewWeight(dataPoint.ial.weight);
 		if (additionalLogInfoMap != {})
 			logObj.setCustomLogInfo(additionalLogInfoMap);
-		if (logEvent == true) ial.log.enqueue(logObj);
+		if (logEvent == true) ial.logging.enqueue(logObj);
 
 		return similarPts;
 	};
@@ -1050,10 +1057,45 @@
 
 	/*
 	 * Returns an attribute weight vector generated based on similarity between given points
+	 * weighted (optional) is a boolean that allows for weighting according to ial item weights
 	 */
-	ial.usermodel.generateAttributeWeightVectorUsingSimilarity = function (points) {
+	ial.usermodel.generateAttributeWeightVectorUsingSimilarity = function (points, weighted) { 
+		if (weighted != true && weighted != false) weighted = true;
+		
+		itemWeights = [];
+		if (weighted) {
+			for (var i = 0; i < points.length; i++)
+				itemWeights.push(points[i].ial.weight);
+		} else itemWeights = Array(points.length).fill(1);
 		var minWeight = ial.minWeight;
 		var maxWeight = ial.maxWeight;
+		
+		// gets the variance of an array
+		function getVariance(arr) {
+
+			function getVariance(arr, mean) {
+				return arr.reduce(function(pre, cur) {
+					pre = pre + Math.pow((cur - mean), 2);
+					return pre;
+				}, 0);
+			}
+			
+			var mean = 0; 
+			for (var i = 0; i < arr.length; i++) {
+				console.log(arr[i], itemWeights[i]);
+				mean += arr[i] * itemWeights[i];
+			}
+			mean /= itemWeights.reduce(function(pre, cur) { return pre + cur; });
+
+			var total = getVariance(arr, mean);
+
+			var res = {
+				mean: mean,
+				variance: total / arr.length
+			};
+
+			return res.variance;
+		}
 
 		// returns maxWeight-result since goal is to find similarity
 		var getNormalizedAttributeWeightByVariance = function(variance, minVariance, maxVariance) {
@@ -1061,7 +1103,7 @@
 			var min = minVariance;
 			var max = maxVariance;
 
-			var normalizedValue = b - (((b - a) * (variance - min) / (max - min)) + a);
+			var normalizedValue = b - Math.abs(((b - a) * (variance - min) / (max - min)) + a);
 
 			return normalizedValue;
 		};
@@ -1073,7 +1115,7 @@
 		for (var i in points) {
 			var d = points[i];
 			for (var attribute in ial.attributeWeightVector) {
-				var val = ial.getNormalizedAttributeValue(d[attribute],attribute);
+				var val = ial.getNormalizedAttributeValue(d[attribute], attribute);
 				if (attribute in attributeValueListMap) attributeValueListMap[attribute].push(val);
 				else {
 					attributeValueListMap[attribute] = [];
@@ -1084,9 +1126,9 @@
 		console.log(attributeValueListMap)
 
 		// setting weights as variances (intermediate step)
-		var minVariance = Number.MAX_VALUE,maxVariance = Number.MIN_VALUE;
+		var minVariance = Number.MAX_VALUE, maxVariance = Number.MIN_VALUE;
 		for (var attribute in ial.attributeWeightVector) {
-			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') {
+			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') { 
 				tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
 				if (tempAttributeWeightVector[attribute] < minVariance)
 					minVariance = tempAttributeWeightVector[attribute];
@@ -1277,31 +1319,6 @@
 		} else return 0;
 	}
 	
-	/* 
-	 * Get the variance of the array 
-	 */
-	function getVariance(arr) {
-
-		function getVariance(arr, mean) {
-			return arr.reduce(function(pre, cur) {
-				pre = pre + Math.pow((cur - mean), 2);
-				return pre;
-			}, 0)
-		}
-
-		var meanTot = arr.reduce(function(pre, cur) {
-			return pre + cur;
-		})
-		var total = getVariance(arr, meanTot / arr.length);
-
-		var res = {
-				mean: meanTot / arr.length,
-				variance: total / arr.length
-		}
-
-		return res.variance;
-	}
-	
 	/*
 	 * Returns an array representing only the unique items from arr
 	 */
@@ -1407,12 +1424,12 @@
 		for (var i = 0; i < ial.biasLogs.length; i++) console.log("bias log", ial.biasLogs[i]);
 
 		// print individual interaction records
-		var itemLogs = ial.log.getItemLogs();
+		var itemLogs = ial.logging.getItemLogs();
 		console.log("# item logs: " + itemLogs.length);
 		for (var i = 0; i < itemLogs.length; i++) console.log("item log", itemLogs[i]);
 
 		// print attribute weight change records
-		var attrLogs = ial.log.getAttributeLogs(); 
+		var attrLogs = ial.logging.getAttributeLogs(); 
 		console.log("# attribute logs: " + attrLogs.length);
 		for (var i = 0; i < attrLogs.length; i++) console.log("attribute log", attrLogs[i]);
 	};
@@ -1475,7 +1492,7 @@
 	 * interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	 */
 	ial.usermodel.bias.computeDataPointCoverage = function(time, interactionTypes) {
-		var interactionSubset = getLogSubset(ial.log.getItemLogs(), time, interactionTypes);
+		var interactionSubset = getLogSubset(ial.logging.getItemLogs(), time, interactionTypes);
 
 		var currentLog = {};
 		currentLog['bias_type'] = ial.BIAS_DATA_POINT_COVERAGE;
@@ -1517,8 +1534,8 @@
 	 * interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	 */
 	ial.usermodel.bias.computeDataPointDistribution = function(time, interactionTypes) {
-		var origInteractionSubset = getLogSubset(ial.log.getItemLogs(), time, interactionTypes);
-		var interactionSubsetByData = getLogsByItem(getLogSubset(ial.log.getItemLogs(), time, interactionTypes));
+		var origInteractionSubset = getLogSubset(ial.logging.getItemLogs(), time, interactionTypes);
+		var interactionSubsetByData = getLogsByItem(getLogSubset(ial.logging.getItemLogs(), time, interactionTypes));
 
 		var currentLog = {};
 		var curDate = new Date();
@@ -1576,7 +1593,7 @@
 	 */
 	ial.usermodel.bias.computeAttributeCoverage = function(time, interactionTypes, numQuantiles) {
 		numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
-		var interactionSubset = getLogSubset(ial.log.getItemLogs(), time, interactionTypes);
+		var interactionSubset = getLogSubset(ial.logging.getItemLogs(), time, interactionTypes);
 
 		var currentLog = {};
 		currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_COVERAGE;
@@ -1693,7 +1710,7 @@
 	 * interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	 */
 	ial.usermodel.bias.computeAttributeDistribution = function(time, interactionTypes) {
-		var interactionSubset = getLogSubset(ial.log.getItemLogs(), time, interactionTypes);
+		var interactionSubset = getLogSubset(ial.logging.getItemLogs(), time, interactionTypes);
 
 		var currentLog = {};
 		currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_DISTRIBUTION;
@@ -1788,7 +1805,7 @@
 	 */
 	ial.usermodel.bias.computeAttributeWeightCoverage = function(time, interactionTypes, numQuantiles) {
 		numQuantiles = typeof numQuantiles !== 'undefined' ? numQuantiles : 4;
-		var weightVectorSubset = getLogSubset(ial.log.getAttributeLogs(), time, 'undefined');
+		var weightVectorSubset = getLogSubset(ial.logging.getAttributeLogs(), time, 'undefined');
 
 		var currentLog = {};
 		currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_WEIGHT_COVERAGE;
@@ -1895,7 +1912,7 @@
 	 * interactionTypes (optional) limits scope of computation to particular interaction types or all if left unspecified
 	 */
 	ial.usermodel.bias.computeAttributeWeightDistribution = function(time, interactionTypes) {
-		var weightVectorSubset = getLogSubset(ial.log.getAttributeLogs(), time, 'undefined');
+		var weightVectorSubset = getLogSubset(ial.logging.getAttributeLogs(), time, 'undefined');
 
 		var currentLog = {};
 		currentLog['bias_type'] = ial.BIAS_ATTRIBUTE_WEIGHT_DISTRIBUTION;
