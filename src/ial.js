@@ -1081,10 +1081,8 @@
 			}
 			
 			var mean = 0; 
-			for (var i = 0; i < arr.length; i++) {
-				console.log(arr[i], itemWeights[i]);
+			for (var i = 0; i < arr.length; i++)
 				mean += arr[i] * itemWeights[i];
-			}
 			mean /= itemWeights.reduce(function(pre, cur) { return pre + cur; });
 
 			var total = getVariance(arr, mean);
@@ -2029,14 +2027,14 @@
 		var tempStringId = 10,
 		tempStringValMap = {};
 
-		//Use the attribute weight vector for these computations.
+		// Use the attribute weight vector for these computations.
 		for (var index in dataPoints) {
 			aggregateScores[index] = {};
 			aggregateScores[index]["ial"] = {};
 			aggregateScores[index]["ial"]["id"] = dataPoints[index]["ial"]["id"];
 			aggregateScores[index]["ial"]["aggregateScore"] = 0;
 			for (var attributeName in ial.attributeWeightVector) {
-				var attributeValue = ial.getNormalizedAttributeValue(dataPoints[index][attributeName],attributeName);
+				var attributeValue = ial.getNormalizedAttributeValue(dataPoints[index][attributeName], attributeName);
 				var attributeWeight = ial.attributeWeightVector[attributeName];
 
 				if (attributeName != 'ial') {

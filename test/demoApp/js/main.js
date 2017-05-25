@@ -183,6 +183,12 @@
                 ial.usermodel.incrementItemWeight(d, hoverWeight, true, {'level':'INFO', 'eventType':'hover'});
                 tip.show(d);
             }).on('mouseout', tip.hide);
+            
+            
+            d3.selectAll('.dot').on('mouseover', function(d) {
+            	ial.logging.log(d, new Date(), 'hover');
+            	tip.show(d);
+            }).on('mouseout', tip.hide);
     };
 
     main.drawKNN = function(width,height,clusters) {
