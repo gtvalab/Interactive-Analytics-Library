@@ -292,7 +292,7 @@
         for (var i in dataItemSessionLogs) {
             var logObj = dataItemSessionLogs[i];
             var dId = logObj.dataItem.ial.id;
-            var interactionEvent = logObj.customLogInfo.eventType;
+            var interactionEvent = logObj.eventName;
             if (dId in distributionMap)
                 distributionMap[dId][interactionEvent] += 1;
         }

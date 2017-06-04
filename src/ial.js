@@ -377,7 +377,7 @@
 
 	/*
 	 * --------------------
-	 *      IAL.LOG
+	 *     IAL.LOGGING
 	 * --------------------
 	 */
 
@@ -500,6 +500,14 @@
 	ial.logging.dequeue = function() {
 		return ial.sessionLogs.shift(); 
 	};
+	
+	/*
+	 * Get the latest log
+	 */
+	ial.logging.peek = function() {
+		if (ial.sessionLogs.length > 0) return ial.sessionLogs[ial.sessionLogs.length - 1];
+		else return;
+	}
 
 	/* 
 	 * private
@@ -1121,7 +1129,7 @@
 				}
 			}
 		}
-		console.log(attributeValueListMap)
+		//console.log(attributeValueListMap)
 
 		// setting weights as variances (intermediate step)
 		var minVariance = Number.MAX_VALUE, maxVariance = Number.MIN_VALUE;
@@ -1140,7 +1148,7 @@
 					tempAttributeWeightVector[attribute] = 1;
 			}
 		}
-		console.log(ial.utils.clone(tempAttributeWeightVector));
+		//console.log(ial.utils.clone(tempAttributeWeightVector));
 
 		// setting weights as normalized values between minWeight and maxWeight based on variances (final step)
 		for (var attribute in ial.attributeWeightVector) {
