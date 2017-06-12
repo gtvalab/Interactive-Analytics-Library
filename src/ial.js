@@ -430,7 +430,7 @@
 		logObj.setEventName(eventName);
 		if (customInfo != {}) logObj.setCustomLogInfo(customInfo);
 
-		ial.sessionLogs.push(logObj);
+		ial.logging.enqueue(logObj);
 	};
 
 	/*
