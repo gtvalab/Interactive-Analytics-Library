@@ -1108,6 +1108,7 @@
 			var a = minWeight, b = maxWeight;
 			var min = minVariance;
 			var max = maxVariance;
+			if (max == min) return minWeight;
 
 			var normalizedValue = b - Math.abs(((b - a) * (variance - min) / (max - min)) + a);
 
@@ -1136,10 +1137,6 @@
 		for (var attribute in ial.attributeWeightVector) {
 			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') { 
 				tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
-				if (tempAttributeWeightVector[attribute] < minVariance)
-					minVariance = tempAttributeWeightVector[attribute];
-				if (tempAttributeWeightVector[attribute] > maxVariance)
-					maxVariance = tempAttributeWeightVector[attribute];
 			} else { // TODO: How is this working for categorical variables now? 
 				var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
 				if (uniqueVals.length > 1)
@@ -1147,6 +1144,11 @@
 				else
 					tempAttributeWeightVector[attribute] = 1;
 			}
+			
+			if (tempAttributeWeightVector[attribute] < minVariance)
+				minVariance = tempAttributeWeightVector[attribute];
+			if (tempAttributeWeightVector[attribute] > maxVariance)
+				maxVariance = tempAttributeWeightVector[attribute];
 		}
 		//console.log(ial.utils.clone(tempAttributeWeightVector));
 
