@@ -965,6 +965,11 @@
 		logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
 		additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
+		if (n > ial.dataSet.length - dataPoints.length) {
+			n = ial.dataSet.length - dataPoints.length;
+			console.log('ERROR: N must be less than or equal to the size of the dataset (' + ial.dataSet.length + ') less the size of the input array of points (' + dataPoints.length + '). Setting N = ' + n + '.');
+		}
+		
 		var logObj = new LogObj(dataPoints);
 		if (dataPoints.length == 1) 
 			logObj.setOldWeight(dataPoints[0].ial.weight);
@@ -975,12 +980,13 @@
 		var allPts = [];
 		var similarPts = [];
 
-		var id = 'none';
-		if (centroid.hasOwnProperty('ial') && centroid.ial.hasOwnProperty('id'))
-			id = centroid.ial.id;
+		var ids = [];
+		for (var i = 0; i < dataPoints.length; i++)
+			ids.push(dataPoints[i].ial.id);
+		
 		for (var i in ial.dataSet) {
 			// don't care to get the similarity with itself
-			if (ial.dataSet[i]["ial"]["id"] != id) {
+			if (!ids.includes(ial.dataSet[i]["ial"]["id"])) {
 				var similarityScore = ial.usermodel.getSimilarityScore(centroid, ial.dataSet[i]);
 				if (similarityScore != -1) {
 					var newPt = { "data" : ial.dataSet[i], "similarity" : similarityScore };
