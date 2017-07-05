@@ -957,31 +957,31 @@
 
 
 	/*
-	 * Return an array of the n most similar points to the given data point
+	 * Return an array of the n most similar points to the given data point(s)
+	 * dataPoints must be an array of 1 or more items
 	 */
-	ial.usermodel.getNSimilarPoints = function(dataPoint, n, logEvent, additionalLogInfoMap) {
+	ial.usermodel.getNSimilarPoints = function(dataPoints, n, logEvent, additionalLogInfoMap) {
 
 		logEvent = typeof logEvent !== 'undefined' ? logEvent : false;
 		additionalLogInfoMap = typeof additionalLogInfoMap !== 'undefined' ? additionalLogInfoMap : {};
 
-		var logObj = new LogObj(dataPoint);
-		logObj.setOldWeight(dataPoint.ial.weight);
+		var logObj = new LogObj(dataPoints);
+		if (dataPoints.length == 1) 
+			logObj.setOldWeight(dataPoints[0].ial.weight);
 		logObj.setEventName('GetSimilarPoints');
-
-		var id = dataPoint.ial.id;
-
-		// locate the given point
-		var dataPt;
-		if (id in ial.ialIdToDataMap) dataPt = ial.ialIdToDataMap[id];
-		else return [];
+		
+		var centroid = ial.usermodel.getCentroidPoint(dataPoints);
 
 		var allPts = [];
 		var similarPts = [];
 
+		var id = 'none';
+		if (centroid.hasOwnProperty('ial') && centroid.ial.hasOwnProperty('id'))
+			id = centroid.ial.id;
 		for (var i in ial.dataSet) {
 			// don't care to get the similarity with itself
 			if (ial.dataSet[i]["ial"]["id"] != id) {
-				var similarityScore = ial.usermodel.getSimilarityScore(dataPt, ial.dataSet[i]);
+				var similarityScore = ial.usermodel.getSimilarityScore(centroid, ial.dataSet[i]);
 				if (similarityScore != -1) {
 					var newPt = { "data" : ial.dataSet[i], "similarity" : similarityScore };
 					allPts.push(newPt);
@@ -996,7 +996,8 @@
 
 		for (var i = 0; i < n; i++) similarPts.push(allPts[i]["data"]);
 
-		logObj.setNewWeight(dataPoint.ial.weight);
+		if (dataPoints.length == 1) 
+			logObj.setNewWeight(dataPoints[0].ial.weight);
 		if (additionalLogInfoMap != {})
 			logObj.setCustomLogInfo(additionalLogInfoMap);
 		if (logEvent == true) ial.logging.enqueue(logObj);
@@ -1009,20 +1010,10 @@
 	 * lower value indicates more similar
 	 */
 	ial.usermodel.getSimilarityScore = function(dataPoint1, dataPoint2) {
-		var id1 = dataPoint1.ial.id;
-		var id2 = dataPoint2.ial.id;
-		// locate the given points
-		var dataPt1, dataPt2;
-
-		if ((id1 in ial.ialIdToDataMap) && (id2 in ial.ialIdToDataMap)) {
-			dataPt1 = ial.ialIdToDataMap[id1];
-			dataPt2 = ial.ialIdToDataMap[id2];
-		} else return -1;
-
 		simScore = 0;
 		for (var attribute in ial.attributeWeightVector) {
 			var currentAttrWeight = ial.normAttributeWeightVector[attribute];
-			simScore += ((currentAttrWeight * 1.0 / ial.activeAttributeCount) * ial.usermodel.getNormalizedDistanceByAttribute(dataPt1, dataPt2, attribute));
+			simScore += ((currentAttrWeight * 1.0 / ial.activeAttributeCount) * ial.usermodel.getNormalizedDistanceByAttribute(dataPoint1, dataPoint2, attribute));
 		} // TODO: does this need to be scaled by activeAttributeCount?
 		
 		if (simScore > 1 || simScore < 0) 
@@ -1030,34 +1021,61 @@
 		return simScore;
 	};
 
-
+	/*
+	 * Compute a centroid point given the list of input points
+	 */
+	ial.usermodel.getCentroidPoint = function(dataPoints) {
+		var centroid = {};
+		if (dataPoints.length == 1) return dataPoints[0];
+		
+		for (var attribute in ial.attributeWeightVector) {
+			var attrCenter;
+			if (ial.attributeValueMap[attribute]['dataType'] == 'categorical') {
+				// if categorical, centroid is value that appears most # of times
+				attrCenter = dataPoints[0][attribute];
+				var valCounts = {};
+				var highestCount = 1;
+				var highestVal = attrCenter;
+				for (var i = 0; i < dataPoints.length; i++) {
+					var attrVal = dataPoints[i][attribute];
+					if (valCounts.hasOwnProperty(attrVal)) valCounts[attrVal]++;
+					else valCounts[attrVal] = 1;
+					if (valCounts[attrVal] > highestCount) {
+						highestCount = valCounts[attrVal];
+						highestVal = attrVal;
+					}
+				}
+				centroid[attribute] = highestVal;
+			} else { 
+				// if numerical, centroid is average
+				attrCenter = 0;
+				for (var i = 0; i < dataPoints.length; i++)
+					attrCenter += Number(dataPoints[i][attribute]);
+				attrCenter /= dataPoints.length;
+				centroid[attribute] = attrCenter;
+			}
+		}
+		
+		return centroid;
+	};
+	
 	/* 
 	 * Get the normalized distance between the two items with the given ids for the given attribute 
 	 */
 	ial.usermodel.getNormalizedDistanceByAttribute = function(dataPoint1, dataPoint2, attribute) {
-		var id1 = dataPoint1.ial.id;
-		var id2 = dataPoint2.ial.id;
-
-		// locate the given points
-		var dataPt1, dataPt2;
-
-		if ((id1 in ial.ialIdToDataMap) && (id2 in ial.ialIdToDataMap)) {
-			dataPt1 = ial.ialIdToDataMap[id1];
-			dataPt2 = ial.ialIdToDataMap[id2];
-		} else return -1;
 
 		var attrVal1, attrVal2;
 
 		if (ial.attributeValueMap[attribute]['dataType'] == 'categorical') {
-			attrVal1 = ial.getNormalizedAttributeValue(dataPt1[attribute], attribute);
-			attrVal2 = ial.getNormalizedAttributeValue(dataPt2[attribute], attribute);
+			attrVal1 = ial.getNormalizedAttributeValue(dataPoint1[attribute], attribute);
+			attrVal2 = ial.getNormalizedAttributeValue(dataPoint2[attribute], attribute);
 			if (attrVal1 == attrVal2) // attributes are the same, distance = 0
 				return 0;
 			else // attributes are different, distance = 1
 				return 1;
 		} else { // numerical
-			attrVal1 = ial.getNormalizedAttributeValue(parseFloat(dataPt1[attribute]), attribute);
-			attrVal2 = ial.getNormalizedAttributeValue(parseFloat(dataPt2[attribute]), attribute);
+			attrVal1 = ial.getNormalizedAttributeValue(parseFloat(dataPoint1[attribute]), attribute);
+			attrVal2 = ial.getNormalizedAttributeValue(parseFloat(dataPoint2[attribute]), attribute);
 			var attrRange = [ial.attributeValueMap[attribute]['min'], ial.attributeValueMap[attribute]['max']];
 			return Math.abs((attrVal1) - (attrVal2)) / (attrRange[1] - attrRange[0]);
 		}
