@@ -1080,8 +1080,8 @@
 			else // attributes are different, distance = 1
 				return 1;
 		} else { // numerical
-			attrVal1 = ial.getNormalizedAttributeValue(parseFloat(dataPoint1[attribute]), attribute);
-			attrVal2 = ial.getNormalizedAttributeValue(parseFloat(dataPoint2[attribute]), attribute);
+			attrVal1 = parseFloat(dataPoint1[attribute]);
+			attrVal2 = parseFloat(dataPoint2[attribute]);
 			var attrRange = [ial.attributeValueMap[attribute]['min'], ial.attributeValueMap[attribute]['max']];
 			return Math.abs((attrVal1) - (attrVal2)) / (attrRange[1] - attrRange[0]);
 		}
