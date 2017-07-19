@@ -1135,7 +1135,6 @@
 			if (max == min) return minWeight;
 
 			var normalizedValue = b - Math.abs(((b - a) * (variance - min) / (max - min)) + a);
-
 			return normalizedValue;
 		};
 
@@ -1154,10 +1153,10 @@
 				}
 			}
 		}
-		//console.log(attributeValueListMap)
 
 		// setting weights as variances (intermediate step)
 		var minVariance = Number.MAX_VALUE, maxVariance = Number.MIN_VALUE;
+		var categoricalNonzero = false; 
 		for (var attribute in ial.attributeWeightVector) {
 			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') { 
 				tempAttributeWeightVector[attribute] = getVariance(attributeValueListMap[attribute]);
@@ -1165,8 +1164,10 @@
 				var uniqueVals = getUniqueList(attributeValueListMap[attribute]);
 				if (uniqueVals.length > 1)
 					tempAttributeWeightVector[attribute] = 0;
-				else
+				else {
 					tempAttributeWeightVector[attribute] = 1;
+					categoricalNonzero = true;
+				}
 			}
 			
 			if (tempAttributeWeightVector[attribute] < minVariance)
@@ -1174,11 +1175,18 @@
 			if (tempAttributeWeightVector[attribute] > maxVariance)
 				maxVariance = tempAttributeWeightVector[attribute];
 		}
-		//console.log(ial.utils.clone(tempAttributeWeightVector));
 
 		// setting weights as normalized values between minWeight and maxWeight based on variances (final step)
+		// special case: if all categorical attributes are weighted 0 and only one numeric attribute exists, give it max weight 
+		var numNumeric = 0;
 		for (var attribute in ial.attributeWeightVector) {
-			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') {
+			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical')
+				numNumeric++;
+		}
+		for (var attribute in ial.attributeWeightVector) {
+			if (ial.attributeValueMap[attribute]['dataType'] != 'categorical' && numNumeric == 1 && categoricalNonzero == false) {
+				tempAttributeWeightVector[attribute] = maxWeight;
+			} else if (ial.attributeValueMap[attribute]['dataType'] != 'categorical') {
 				var normalizedAttributeWeight = getNormalizedAttributeWeightByVariance(tempAttributeWeightVector[attribute], minVariance, maxVariance);
 				tempAttributeWeightVector[attribute] = normalizedAttributeWeight;
 			}
